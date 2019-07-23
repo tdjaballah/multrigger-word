@@ -8,6 +8,9 @@ multrigger-word documentation!
 
 Contents:
 
+.. automodule:: src.data.utils
+    :members:
+
 .. toctree::
    :maxdepth: 2
 

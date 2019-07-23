@@ -5,6 +5,15 @@ from pydub import AudioSegment
 
 # Calculate and plot spectrogram for a wav audio file
 def graph_spectrogram(wav_file):
+    """Example function with PEP 484 type annotations.
+
+    Args:
+        param1: The first parameter.
+
+    Returns:
+        The return value. True for success, False otherwise.
+
+    """
     rate, data = get_wav_info(wav_file)
     nfft = 200 # Length of each window segment
     fs = 8000 # Sampling frequencies
