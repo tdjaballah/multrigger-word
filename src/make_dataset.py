@@ -1,7 +1,8 @@
-import matplotlib.pyplot as plt
 import glob
 import logging
+import matplotlib.pyplot as plt
 import numpy as np
+import os
 import tensorflow as tf
 import random
 
@@ -153,7 +154,7 @@ def match_target_amplitude(sound, target_dBFS):
     return sound.apply_gain(change_in_dBFS)
 
 
-def insert_ones(y, segment_end_ms, background_duration_ms):
+def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     """
     Update the label vector y. The labels of the 50 output steps strictly after the end of the segment
     should be set to 1. By strictly we mean that the label of segment_end_y should be 0 while, the
@@ -170,12 +171,12 @@ def insert_ones(y, segment_end_ms, background_duration_ms):
     # Add 1 to the correct index in the background label (y)
     for i in range(segment_end_y + 1, segment_end_y + 51):
         if i < TY:
-            y[i, 0] = 1
+            y[i, y_label] = 1
 
     return y
 
 
-def create_training_example(background, background_duration_ms, positives, negatives):
+def create_training_example(background, background_duration_ms, positives, negatives, multrigger_mode):
     """
     Creates a training example with a given background, activates, and negatives.
 
@@ -195,7 +196,7 @@ def create_training_example(background, background_duration_ms, positives, negat
     background = match_target_amplitude(background, -45)
 
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
-    y = np.zeros((TY, 1))
+    y = np.zeros((TY, N_CLASSES))
 
     # Step 2: Initialize segment times as empty list (≈ 1 line)
     previous_segments = []
@@ -207,7 +208,11 @@ def create_training_example(background, background_duration_ms, positives, negat
         if np.random.random() > 1 / 3:
 
             # Take random positive with random label and get the right amplitude
-            label = random.choice(list(positives.keys()))
+            y_label, label = random.choice(list(enumerate(sorted(list(positives.keys())))))
+            if N_CLASSES == 1:
+                y_label = 0
+            else:
+                y_label += 1
             random_positive = random.choice(positives[label])
             random_positive = match_target_amplitude(random_positive, -20.0)
             # Insert the audio clip on the background
@@ -216,7 +221,7 @@ def create_training_example(background, background_duration_ms, positives, negat
             # Retrieve segment_start and segment_end from segment_time
             segment_start, segment_end = segment_time
             # Insert labels in "y"
-            y = insert_ones(y, segment_end, background_duration_ms)
+            y = insert_ones(y, y_label, segment_end, background_duration_ms)
 
         else:
 
@@ -233,6 +238,8 @@ def create_training_example(background, background_duration_ms, positives, negat
 
     # Get and plot spectrogram of the new recording (background with superposition of positive and negatives)
     x = graph_spectrogram("{}/train.wav".format(INTERIM_DATA_DIR))
+
+    print(x.shape, y.shape)
 
     return np.swapaxes(x, 0, 1), y
 
@@ -258,7 +265,7 @@ def serialize_example(x, y):
     return example.SerializeToString()
 
 
-def main(sample_duration_ms, n_samples):
+def main(sample_duration_ms, n_samples, multrigger_mode):
     """
     Runs data processing scripts to turn raw audio data from (../raw/*) into
     cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
@@ -266,12 +273,13 @@ def main(sample_duration_ms, n_samples):
     :param n_samples: number of samples
     :return:
     """
-    logger = logging.getLogger(__name__)
-    positives, negatives, backgrounds = load_raw_audio()
 
-    print(PROJECT_DIR)
-    print(DATA_DIR)
-    print(PROCESSED_DATA_DIR)
+    tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
+
+    for i in tfrecord_files:
+        os.remove(i)
+
+    positives, negatives, backgrounds = load_raw_audio()
 
     i = 0
 
@@ -280,11 +288,11 @@ def main(sample_duration_ms, n_samples):
 
     for i in range(1, n_samples + 1):
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives)
+        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, multrigger_mode)
         serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
         writer.write(serialized_example)
 
-        if i % 50 == 0:
+        if i % 50 == 0 and i != n_samples:
             print(i)
             writer.close()
             result_tf_file = "{}/{:0>5d}.tfrecord".format(PROCESSED_DATA_DIR, i)
@@ -296,4 +304,4 @@ def main(sample_duration_ms, n_samples):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(sample_duration_ms=5000, n_samples=10000)
+    main(sample_duration_ms=SAMPLE_DURATION_MS, n_samples=N_SAMPLES, multrigger_mode=MULTRIGGER_MODE)

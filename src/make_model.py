@@ -12,8 +12,6 @@ def seq_model(input_shape, n_classes, kernel_size, stride):
     :return: Keras model instance
     """
 
-    tf.keras.backend.clear_session()
-
     X_input = tf.keras.layers.Input(shape=input_shape)
 
     # Step 1: CONV layer (≈4 lines)

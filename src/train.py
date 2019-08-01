@@ -2,9 +2,9 @@ import glob
 import logging
 import tensorflow as tf
 
-from src.settings import *
 from src.make_model import seq_model
-
+from src.settings import *
+from src.utils import f1_m, precision_m, recall_m
 
 def _extract_feature(record, feature):
     example = tf.train.Example.FromString(record.numpy())
@@ -18,7 +18,7 @@ def parser(record):
     :param record: the tf record to parse
     :return: tensor
     """
-    print(type(TX), type(FX), type(TY), type(N_CLASSES))
+
     X = tf.reshape(
         tf.py_function(
             lambda r: _extract_feature(r, "X"),
@@ -48,7 +48,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     """
     dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.map(parser)
-    dataset = dataset.shuffle(buffer_size=10000)
+    #dataset = dataset.shuffle(buffer_size=N_SAMPLES)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(5)
     dataset = dataset.repeat(num_epochs)
@@ -58,7 +58,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     return dataset
 
 
-def main(epochs=100, steps_per_epoch=1000, batch_size=16):
+def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
 
     tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
 
@@ -71,7 +71,7 @@ def main(epochs=100, steps_per_epoch=1000, batch_size=16):
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
-    model.compile(loss='binary_crossentropy', optimizer=opt, metrics=["accuracy"])
+    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
 
     csv_logger = tf.keras.callbacks.CSVLogger(TRAIN_LOG_FILE)
 
@@ -81,8 +81,8 @@ def main(epochs=100, steps_per_epoch=1000, batch_size=16):
                                                      period=5)
 
     model.fit(training_set.make_one_shot_iterator(),
-              steps_per_epoch=steps_per_epoch,
-              epochs=epochs,
+              steps_per_epoch=n_steps_per_epoch,
+              epochs=n_epochs,
               callbacks=[csv_logger, cp_callback],
               verbose=1
               )
