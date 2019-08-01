@@ -10,10 +10,17 @@ RAW_DATA_DIR = Path("{}/raw".format(DATA_DIR))
 INTERIM_DATA_DIR = Path("{}/interim".format(DATA_DIR))
 PROCESSED_DATA_DIR = Path("{}/processed".format(DATA_DIR))
 
+LOG_DIR = Path("{}/logs".format(PROJECT_DIR))
+TRAIN_LOG_FILE = Path("{}/training.log".format(LOG_DIR))
+CHECKPOINT_DIR = Path("{}/checkpoints".format(LOG_DIR))
+CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
+
+
 KERNEL_SIZE = 15
 STRIDE = 4
 FRAME_RATE = 48000
 NFFT = 512
-TX = FRAME_RATE * 0.0195
+TX = int(FRAME_RATE * 0.0195)
 FX = int(NFFT / 2) + 1
 TY = round((TX - KERNEL_SIZE + STRIDE) / STRIDE)
+N_CLASSES = 1

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import matplotlib.pyplot as plt
 import glob
 import logging
@@ -294,8 +292,4 @@ def main(sample_duration_ms, n_samples):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    positives, negatives, backgrounds = load_raw_audio()
-    sample_duration_ms = 5000
-    x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives)
-    print(x.shape, y.shape)
-    #main(sample_duration_ms=5000, n_samples=10000)
+    main(sample_duration_ms=5000, n_samples=10000)
