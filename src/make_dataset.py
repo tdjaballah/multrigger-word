@@ -269,6 +269,10 @@ def main(sample_duration_ms, n_samples):
     logger = logging.getLogger(__name__)
     positives, negatives, backgrounds = load_raw_audio()
 
+    print(PROJECT_DIR)
+    print(DATA_DIR)
+    print(PROCESSED_DATA_DIR)
+
     i = 0
 
     result_tf_file = "{}/{:0>5d}.tfrecord".format(PROCESSED_DATA_DIR, i)

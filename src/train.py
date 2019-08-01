@@ -60,10 +60,6 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
 
 def main(epochs=100, steps_per_epoch=1000, batch_size=16):
 
-    print(PROJECT_DIR)
-    print(DATA_DIR)
-    print(PROCESSED_DATA_DIR)
-
     tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
 
     training_set = dataset_input_fn(tfrecord_files, batch_size, None)
