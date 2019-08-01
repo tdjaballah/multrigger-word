@@ -48,7 +48,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     """
     dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.map(parser)
-    dataset = dataset.shuffle(buffer_size=N_SAMPLES)
+    #dataset = dataset.shuffle(buffer_size=N_SAMPLES)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(5)
     dataset = dataset.repeat(num_epochs)
@@ -60,7 +60,7 @@ def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
 
     tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
 
-    training_set = dataset_input_fn(tfrecord_files, batch_size, None)
+    training_set = dataset_input_fn(tfrecord_files, batch_size)
 
     model = seq_model(input_shape=(TX, FX),
                       n_classes=N_CLASSES,
@@ -69,7 +69,12 @@ def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
-    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
+    if MULTRIGGER_MODE:
+        loss_function = 'categorical_crossentropy'
+    else:
+        loss_function = 'binary_crossentropy'
+
+    model.compile(loss=loss_function, optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
 
     csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))
 

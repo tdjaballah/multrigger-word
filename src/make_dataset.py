@@ -208,10 +208,10 @@ def create_training_example(background, background_duration_ms, positives, negat
 
             # Take random positive with random label and get the right amplitude
             y_label, label = random.choice(list(enumerate(sorted(list(positives.keys())))))
-            if N_CLASSES == 1:
-                y_label = 0
-            else:
+            if MULTRIGGER_MODE:
                 y_label += 1
+            else:
+                y_label = 0
             random_positive = random.choice(positives[label])
             random_positive = match_target_amplitude(random_positive, -20.0)
             # Insert the audio clip on the background

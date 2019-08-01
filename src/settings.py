@@ -28,9 +28,20 @@ TX = int(FRAME_RATE * 0.0195)
 FX = int(NFFT / 2) + 1
 TY = round((TX - KERNEL_SIZE + STRIDE) / STRIDE)
 
-MULTRIGGER_MODE = True
+MULTRIGGER_MODE = False
 
 if MULTRIGGER_MODE:
     N_CLASSES = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
 else:
     N_CLASSES = 1
+
+
+CHUNK_DURATION = 0.5 # Each read length in seconds from mic.
+FS = 44100 # sampling rate for mic
+CHUNK_SAMPLES = int(FS * CHUNK_DURATION) # Each read length in number of samples.
+
+# Each model input data duration in seconds, need to be an integer numbers of chunk_duration
+FEED_DURATION = 10
+FEED_SAMPLES = int(FS * FEED_DURATION)
+
+assert FEED_DURATION / CHUNK_DURATION == int(FEED_DURATION / CHUNK_DURATION)
