@@ -1,4 +1,3 @@
-import glob
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -238,8 +237,6 @@ def create_training_example(background, background_duration_ms, positives, negat
 
     # Get and plot spectrogram of the new recording (background with superposition of positive and negatives)
     x = graph_spectrogram("{}/train.wav".format(INTERIM_DATA_DIR))
-
-    print(x.shape, y.shape)
 
     return np.swapaxes(x, 0, 1), y
 

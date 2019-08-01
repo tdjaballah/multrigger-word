@@ -1,10 +1,10 @@
-import glob
 import logging
 import tensorflow as tf
 
 from src.make_model import seq_model
 from src.settings import *
 from src.utils import f1_m, precision_m, recall_m
+
 
 def _extract_feature(record, feature):
     example = tf.train.Example.FromString(record.numpy())
@@ -48,12 +48,10 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     """
     dataset = tf.data.TFRecordDataset(filenames)
     dataset = dataset.map(parser)
-    #dataset = dataset.shuffle(buffer_size=N_SAMPLES)
+    dataset = dataset.shuffle(buffer_size=N_SAMPLES)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(5)
     dataset = dataset.repeat(num_epochs)
-    # iterator = dataset.make_one_shot_iterator()
-    # features, labels = iterator.get_next()
 
     return dataset
 
@@ -73,7 +71,7 @@ def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
 
     model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
 
-    csv_logger = tf.keras.callbacks.CSVLogger(TRAIN_LOG_FILE)
+    csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))
 
     cp_callback = tf.keras.callbacks.ModelCheckpoint(CHECKPOINT_FILES,
                                                      verbose=1,
