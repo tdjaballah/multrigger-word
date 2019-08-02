@@ -303,8 +303,9 @@ def main(sample_duration_ms, n_samples):
     """
 
     tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
+    interim_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
 
-    for i in tfrecord_files:
+    for i in tfrecord_files + interim_files:
         os.remove(i)
 
     positives, negatives, backgrounds = load_raw_audio()
