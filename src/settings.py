@@ -33,12 +33,12 @@ MULTRIGGER_MODE = False
 if MULTRIGGER_MODE:
     N_CLASSES = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
 else:
-    N_CLASSES = 1
+    N_CLASSES = 2
 
 
-CHUNK_DURATION = 0.5 # Each read length in seconds from mic.
-FS = 44100 # sampling rate for mic
-CHUNK_SAMPLES = int(FS * CHUNK_DURATION) # Each read length in number of samples.
+CHUNK_DURATION = 0.5  # Each read length in seconds from mic.
+FS = 48000  # sampling rate for mic
+CHUNK_SAMPLES = int(FS * CHUNK_DURATION)  # Each read length in number of samples.
 
 # Each model input data duration in seconds, need to be an integer numbers of chunk_duration
 FEED_DURATION = 10

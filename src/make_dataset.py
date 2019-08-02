@@ -17,11 +17,10 @@ def get_wav_info(wav_file):
     return rate, data
 
 
-def graph_spectrogram(wav_file, fs=2, noverlap=256):
+def graph_spectrogram(wav_file, fs=2):
     """
     Calculate and plot spectrogram for a wav audio file
     :param wav_file:
-    :param nfft: Length of each window segment
     :param fs: Sampling frequencies
     :param noverlap: Overlap between windows
     :return:
@@ -32,7 +31,7 @@ def graph_spectrogram(wav_file, fs=2, noverlap=256):
     if nchannels > 1:
         data = data[:, 0]
 
-    pxx, _, _, _ = plt.specgram(data, NFFT, fs, noverlap=noverlap)
+    pxx, _, _, _ = plt.specgram(data, NFFT, fs, noverlap=int(NFFT/2))
 
     return pxx
 
@@ -171,11 +170,12 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     for i in range(segment_end_y + 1, segment_end_y + 51):
         if i < TY:
             y[i, y_label] = 1
+            y[i, 0] = 0
 
     return y
 
 
-def create_training_example(background, background_duration_ms, positives, negatives, multrigger_mode):
+def create_training_example(background, background_duration_ms, positives, negatives):
     """
     Creates a training example with a given background, activates, and negatives.
 
@@ -183,7 +183,6 @@ def create_training_example(background, background_duration_ms, positives, negat
     :param background_duration_ms: background duration we want in ms
     :param positives: list of audio segments of the positives word we want to detect
     :param negatives: a list of audio segments of random words that we dont care about
-    :param y_shape : shape of the label vector
     :return: tuple (x,y) with
     x -- the spectrogram of the training example
     y -- the label at each time step of the spectrogram
@@ -196,6 +195,7 @@ def create_training_example(background, background_duration_ms, positives, negat
 
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
     y = np.zeros((TY, N_CLASSES))
+    y[:, 0] = 1
 
     # Step 2: Initialize segment times as empty list (≈ 1 line)
     previous_segments = []

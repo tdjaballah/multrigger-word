@@ -56,7 +56,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     return dataset
 
 
-def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
+def main(n_epochs=10, n_steps_per_epoch=10, batch_size=64):
 
     tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
 
@@ -69,12 +69,7 @@ def main(n_epochs=100, n_steps_per_epoch=1000, batch_size=64):
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
-    if MULTRIGGER_MODE:
-        loss_function = 'categorical_crossentropy'
-    else:
-        loss_function = 'binary_crossentropy'
-
-    model.compile(loss=loss_function, optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
+    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
 
     csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))
 
