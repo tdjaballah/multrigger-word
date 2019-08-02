@@ -285,7 +285,7 @@ def main(sample_duration_ms, n_samples, multrigger_mode):
 
     for i in range(1, n_samples + 1):
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, multrigger_mode)
+        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives)
         serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
         writer.write(serialized_example)
 
