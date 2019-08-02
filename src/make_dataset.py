@@ -1,9 +1,11 @@
 import logging
-import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
 import numpy as np
 import os
-import tensorflow as tf
+import pandas as pd
 import random
+import seaborn as sns
+import tensorflow as tf
 
 from pydub import AudioSegment
 from scipy.io import wavfile
@@ -17,23 +19,34 @@ def get_wav_info(wav_file):
     return rate, data
 
 
-def graph_spectrogram(wav_file, fs=2):
+def get_spectrogram(data, fs=2):
     """
-    Calculate and plot spectrogram for a wav audio file
-    :param wav_file:
-    :param fs: Sampling frequencies
-    :param noverlap: Overlap between windows
+    Get spectrogram from raw audio data
+    :param data: raw audio data
+    :param fs:
     :return:
     """
-    rate, data = get_wav_info(wav_file)
+
     nchannels = data.ndim
 
     if nchannels > 1:
         data = data[:, 0]
 
-    pxx, _, _, _ = plt.specgram(data, NFFT, fs, noverlap=int(NFFT/2))
+    pxx, _, _ = mlab.specgram(data, NFFT, fs, noverlap=int(NFFT / 2))
 
     return pxx
+
+
+def spectrogram_from_file(wav_file, fs=2):
+    """
+    Calculate and plot spectrogram for a wav audio file
+    :param wav_file: path to the wav file
+    :param fs: Sampling frequencies
+    :return: spectrogram
+    """
+    rate, data = get_wav_info(wav_file)
+
+    return get_spectrogram(data, fs)
 
 
 # Load raw audio files for speech synthesis
@@ -44,16 +57,16 @@ def load_raw_audio():
 
     for filepath in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR)):
         label = filepath.split("/")[-2]
-        positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE)
+        positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
         positives.setdefault(label, [])
         positives[label].append(positive)
 
     for filepath in glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR)):
-        background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE)
+        background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
         backgrounds.append(background)
 
     for filepath in glob.glob("{}/negatives/*.wav".format(RAW_DATA_DIR)):
-        negative = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE)
+        negative = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
         negatives.append(negative)
 
     return positives, negatives, backgrounds
@@ -158,6 +171,7 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     should be set to 1. By strictly we mean that the label of segment_end_y should be 0 while, the
     50 followinf labels should be ones.
     :param y: numpy array of shape (1, Ty), the labels of the training example
+    :pram y_label: number otf the class we have to put 1
     :param segment_end_ms: the end time of the segment in ms
     :param background_duration_ms: duration of the background in ms
     :return:
@@ -175,7 +189,17 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     return y
 
 
-def create_training_example(background, background_duration_ms, positives, negatives):
+def transform_labels(y):
+    """
+    Save figure in smaple dir to visualize our generated labels
+    :param y: ndarray of shape (TY, N_CLASSES)
+    :return: save file png
+    """
+    df = pd.DataFrame(y)
+    return pd.concat([pd.DataFrame({'col': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
+
+
+def create_training_example(background, background_duration_ms, positives, negatives, iter, export):
     """
     Creates a training example with a given background, activates, and negatives.
 
@@ -211,7 +235,7 @@ def create_training_example(background, background_duration_ms, positives, negat
             if MULTRIGGER_MODE:
                 y_label += 1
             else:
-                y_label = 0
+                y_label = 1
             random_positive = random.choice(positives[label])
             random_positive = match_target_amplitude(random_positive, -20.0)
             # Insert the audio clip on the background
@@ -232,11 +256,18 @@ def create_training_example(background, background_duration_ms, positives, negat
     # Standardize the volume of the audio clip
     background = match_target_amplitude(background, -20.0)
 
-    # Export new training example
-    background.export("{}/train.wav".format(INTERIM_DATA_DIR), format="wav")
+    if export and (iter % 50 == 0):
+        # Export new training example
+        file_name = "{}/sample-{}".format(INTERIM_DATA_DIR, iter)
+        background.export(file_name + ".wav", format="wav")
 
-    # Get and plot spectrogram of the new recording (background with superposition of positive and negatives)
-    x = graph_spectrogram("{}/train.wav".format(INTERIM_DATA_DIR))
+        #Export label as a graph
+        df_y = transform_labels(y)
+        sns.relplot(x='x', y='y', row='col', data=df_y, kind='line').savefig(file_name + ".png")
+
+
+    background = np.array(background.get_array_of_samples())
+    x = get_spectrogram(background)
 
     return np.swapaxes(x, 0, 1), y
 
@@ -262,7 +293,7 @@ def serialize_example(x, y):
     return example.SerializeToString()
 
 
-def main(sample_duration_ms, n_samples, multrigger_mode):
+def main(sample_duration_ms, n_samples):
     """
     Runs data processing scripts to turn raw audio data from (../raw/*) into
     cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
@@ -285,7 +316,7 @@ def main(sample_duration_ms, n_samples, multrigger_mode):
 
     for i in range(1, n_samples + 1):
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives)
+        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, i, True)
         serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
         writer.write(serialized_example)
 
@@ -301,4 +332,4 @@ def main(sample_duration_ms, n_samples, multrigger_mode):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(sample_duration_ms=SAMPLE_DURATION_MS, n_samples=N_SAMPLES, multrigger_mode=MULTRIGGER_MODE)
+    main(sample_duration_ms=SAMPLE_DURATION_MS, n_samples=N_SAMPLES)

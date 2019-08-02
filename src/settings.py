@@ -35,7 +35,6 @@ if MULTRIGGER_MODE:
 else:
     N_CLASSES = 2
 
-
 CHUNK_DURATION = 0.5  # Each read length in seconds from mic.
 FS = 48000  # sampling rate for mic
 CHUNK_SAMPLES = int(FS * CHUNK_DURATION)  # Each read length in number of samples.
