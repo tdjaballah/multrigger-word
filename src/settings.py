@@ -11,6 +11,8 @@ DATA_DIR = Path("{}/data".format(PROJECT_DIR))
 RAW_DATA_DIR = Path("{}/raw".format(DATA_DIR))
 INTERIM_DATA_DIR = Path("{}/interim".format(DATA_DIR))
 PROCESSED_DATA_DIR = Path("{}/processed".format(DATA_DIR))
+DEV_PROCESSED_DATA_DIR = Path("{}/dev".format(PROCESSED_DATA_DIR))
+VAL_PROCESSED_DATA_DIR = Path("{}/val".format(PROCESSED_DATA_DIR))
 
 LOG_DIR = Path("{}/logs".format(PROJECT_DIR))
 TRAIN_LOG_FILE = Path("{}/training.log".format(LOG_DIR))
@@ -18,7 +20,8 @@ CHECKPOINT_DIR = Path("{}/checkpoints".format(LOG_DIR))
 CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
 
 SAMPLE_DURATION_MS = 5000
-N_SAMPLES = 300
+N_DEV_SAMPLES = 300
+N_VAL_SAMPLES = int(N_DEV_SAMPLES / 4)
 
 KERNEL_SIZE = 15
 STRIDE = 4

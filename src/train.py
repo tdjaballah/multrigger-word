@@ -56,11 +56,16 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     return dataset
 
 
-def main(n_epochs=10, n_steps_per_epoch=10, batch_size=64):
+def main(n_epochs=10, batch_size=64):
 
-    tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
+    train_steps_per_epoch = int(N_DEV_SAMPLES / batch_size)
+    val_steps_per_epoch = int(N_VAL_SAMPLES / batch_size)
 
-    training_set = dataset_input_fn(tfrecord_files, batch_size)
+    dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_PROCESSED_DATA_DIR))
+    training_set = dataset_input_fn(dev_tfrecord_files, batch_size)
+
+    val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_PROCESSED_DATA_DIR))
+    validation_set = dataset_input_fn(val_tfrecord_files, batch_size)
 
     model = seq_model(input_shape=(TX, FX),
                       n_classes=N_CLASSES,
@@ -79,7 +84,9 @@ def main(n_epochs=10, n_steps_per_epoch=10, batch_size=64):
                                                      period=5)
 
     model.fit(training_set.make_one_shot_iterator(),
-              steps_per_epoch=n_steps_per_epoch,
+              validation_data=validation_set.make_one_shot_iterator(),
+              validation_steps=val_steps_per_epoch,
+              steps_per_epoch=train_steps_per_epoch,
               epochs=n_epochs,
               callbacks=[csv_logger, cp_callback],
               verbose=1

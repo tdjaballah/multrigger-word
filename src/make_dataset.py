@@ -1,16 +1,13 @@
 import logging
 import matplotlib.mlab as mlab
 import numpy as np
-import os
 import pandas as pd
 import random
 import seaborn as sns
 import tensorflow as tf
 
-from pydub import AudioSegment
-from scipy.io import wavfile
-
 from src.settings import *
+from src.utils import *
 
 
 # Load a wav file
@@ -191,7 +188,7 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
 
 def transform_labels(y):
     """
-    Save figure in smaple dir to visualize our generated labels
+    Save figure in sample dir to visualize our generated labels
     :param y: ndarray of shape (TY, N_CLASSES)
     :return: save file png
     """
@@ -199,7 +196,7 @@ def transform_labels(y):
     return pd.concat([pd.DataFrame({'col': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
 
 
-def create_training_example(background, background_duration_ms, positives, negatives, iter, export):
+def create_training_example(background, background_duration_ms, positives, negatives, n_export, export):
     """
     Creates a training example with a given background, activates, and negatives.
 
@@ -207,6 +204,8 @@ def create_training_example(background, background_duration_ms, positives, negat
     :param background_duration_ms: background duration we want in ms
     :param positives: list of audio segments of the positives word we want to detect
     :param negatives: a list of audio segments of random words that we dont care about
+    :param n_export:
+    :param export:
     :return: tuple (x,y) with
     x -- the spectrogram of the training example
     y -- the label at each time step of the spectrogram
@@ -256,15 +255,14 @@ def create_training_example(background, background_duration_ms, positives, negat
     # Standardize the volume of the audio clip
     background = match_target_amplitude(background, -20.0)
 
-    if export and (iter % 50 == 0):
+    if export and (n_export % 50 == 0):
         # Export new training example
-        file_name = "{}/sample-{}".format(INTERIM_DATA_DIR, iter)
+        file_name = "{}/sample-{}".format(INTERIM_DATA_DIR, n_export)
         background.export(file_name + ".wav", format="wav")
 
         #Export label as a graph
         df_y = transform_labels(y)
         sns.relplot(x='x', y='y', row='col', data=df_y, kind='line').savefig(file_name + ".png")
-
 
     background = np.array(background.get_array_of_samples())
     x = get_spectrogram(background)
@@ -293,44 +291,62 @@ def serialize_example(x, y):
     return example.SerializeToString()
 
 
-def main(sample_duration_ms, n_samples):
+def create_tfrecord(sample_duration_ms, n_samples, data_dir, export):
     """
     Runs data processing scripts to turn raw audio data from (../raw/*) into
     cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
     :param sample_duration_ms: sample duration in ms we want
     :param n_samples: number of samples
+    :param data_dir: dir where to write data_dir
+    :param export boolean True if you want to export sample in wav format in interim directory
     :return:
     """
 
-    tfrecord_files = glob.glob("{}/*.tfrecord".format(PROCESSED_DATA_DIR))
-    interim_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
+    files_to_delete = glob.glob("{}/*.tfrecord".format(data_dir))
 
-    for i in tfrecord_files + interim_files:
-        os.remove(i)
+    if export:
+        sample_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
+        files_to_delete.extend(sample_files)
+
+    clean_data_dir(files_to_delete)
 
     positives, negatives, backgrounds = load_raw_audio()
 
     i = 0
 
-    result_tf_file = "{}/{:0>5d}.tfrecord".format(PROCESSED_DATA_DIR, i)
+    result_tf_file = "{}/{:0>5d}.tfrecord".format(data_dir, i)
     writer = tf.io.TFRecordWriter(result_tf_file)
 
     for i in range(1, n_samples + 1):
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, i, True)
+        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, i, export)
         serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
         writer.write(serialized_example)
 
         if i % 50 == 0 and i != n_samples:
             print(i)
             writer.close()
-            result_tf_file = "{}/{:0>5d}.tfrecord".format(PROCESSED_DATA_DIR, i)
+            result_tf_file = "{}/{:0>5d}.tfrecord".format(data_dir, i)
             writer = tf.io.TFRecordWriter(result_tf_file)
 
     writer.close()
 
 
+def main(sample_duration_ms, n_dev_samples, n_val_samples):
+    """
+    Runs data processing scripts to turn raw audio data from (../raw/*) into
+    cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
+    :param sample_duration_ms: sample duration in ms we want
+    :param n_dev_samples: number of training samples
+    :param n_val_samples: number of validation samples
+    :return: tfrecords in specified directories
+    """
+
+    create_tfrecord(sample_duration_ms, n_dev_samples, DEV_PROCESSED_DATA_DIR, export=True)
+    create_tfrecord(sample_duration_ms, n_val_samples, VAL_PROCESSED_DATA_DIR, export=False)
+
+
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(sample_duration_ms=SAMPLE_DURATION_MS, n_samples=N_SAMPLES)
+    main(sample_duration_ms=SAMPLE_DURATION_MS, n_dev_samples=N_DEV_SAMPLES, n_val_samples=N_VAL_SAMPLES)

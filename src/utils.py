@@ -6,6 +6,10 @@ from pydub import AudioSegment
 from scipy.io import wavfile
 
 
+def clean_data_dir(files):
+    [os.remove(file) for file in files]
+
+
 # Calculate and plot spectrogram for a wav audio file
 def graph_spectrogram(wav_file):
 
