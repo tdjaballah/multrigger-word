@@ -11,6 +11,29 @@ def _extract_feature(record, feature):
     return example.features.feature[feature].float_list.value
 
 
+def _parse_function(record):
+    """Extracts features and labels.
+
+    Args:
+      record: File path to a TFRecord file
+    Returns:
+      A `tuple` `(labels, features)`:
+        features: A dict of tensors representing the features
+        labels: A tensor with the corresponding labels.
+    """
+    features = {
+        "X": tf.FixedLenFeature(shape=[TX, FX], dtype=tf.float32),  # terms are strings of varying lengths
+        "Y": tf.FixedLenFeature(shape=[TY, 2], dtype=tf.float32)  # labels are 0 or 1
+    }
+
+    parsed_features = tf.parse_single_example(record, features)
+
+    X = parsed_features['X']
+    Y = parsed_features['Y']
+
+    return X, Y
+
+
 # Load tf record dataset
 def parser(record):
     """
@@ -46,9 +69,9 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     :param num_epochs: num_epochs
     :return: tf.Dataset
     """
-    dataset = tf.data.TFRecordDataset(filenames)
-    dataset = dataset.map(parser)
-    #dataset = dataset.shuffle(buffer_size=N_SAMPLES)
+    dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=N_CORES)
+    dataset = dataset.map(_parse_function,  num_parallel_calls=N_CORES)
+    dataset = dataset.shuffle(buffer_size=int(5*batch_size)+1)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(5)
     dataset = dataset.repeat(num_epochs)
@@ -56,7 +79,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     return dataset
 
 
-def main(n_epochs=10, batch_size=64):
+def main(n_epochs, batch_size):
 
     train_steps_per_epoch = int(N_DEV_SAMPLES / batch_size)
     val_steps_per_epoch = int(N_VAL_SAMPLES / batch_size)
@@ -96,4 +119,4 @@ def main(n_epochs=10, batch_size=64):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main()
+    main(EPOCHS, BATCH_SIZE)

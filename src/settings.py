@@ -1,4 +1,5 @@
 import glob
+import multiprocessing
 
 from dotenv import find_dotenv, load_dotenv
 from pathlib import Path
@@ -19,6 +20,8 @@ TRAIN_LOG_FILE = Path("{}/training.log".format(LOG_DIR))
 CHECKPOINT_DIR = Path("{}/checkpoints".format(LOG_DIR))
 CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
 
+N_CORES = multiprocessing.cpu_count()
+
 SAMPLE_DURATION_MS = 5000
 N_DEV_SAMPLES = 300
 N_VAL_SAMPLES = int(N_DEV_SAMPLES / 4)
@@ -37,6 +40,9 @@ if MULTRIGGER_MODE:
     N_CLASSES = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
 else:
     N_CLASSES = 2
+
+EPOCHS = 20
+BATCH_SIZE = 64
 
 CHUNK_DURATION = 0.5  # Each read length in seconds from mic.
 FS = 48000  # sampling rate for mic
