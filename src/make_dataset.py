@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import random
 import seaborn as sns
+import time
 
 from src.settings import *
 from src.utils import *
@@ -197,14 +198,13 @@ def transform_labels(y):
     return pd.concat([pd.DataFrame({'col': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
 
 
-def create_training_example(background, background_duration_ms, positives, negatives, n_export, export):
+def create_training_example(background, background_duration_ms, positives, n_export, export):
     """
     Creates a training example with a given background, activates, and negatives.
 
     :param background:   background audio recording
     :param background_duration_ms: background duration we want in ms
     :param positives: list of audio segments of the positives word we want to detect
-    :param negatives: a list of audio segments of random words that we dont care about
     :param n_export:
     :param export:
     :return: tuple (x,y) with
@@ -225,7 +225,7 @@ def create_training_example(background, background_duration_ms, positives, negat
     previous_segments = []
 
     # Select 0-2 random "activate" audio clips from the entire list of "activates" recordings for 10 seconds record
-    number_of_sound_to_add = np.random.randint(1, 3 * background_duration_ms / 5000)
+    number_of_sound_to_add = np.random.randint(3 * background_duration_ms / 5000)
 
     for i in range(number_of_sound_to_add):
 
@@ -315,7 +315,7 @@ def create_tfrecord(sample_duration_ms, n_samples, data_dir, export):
 
     for i in range(1, n_samples + 1):
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, negatives, i, export)
+        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, i, export)
         serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
         writer.write(serialized_example)
 
