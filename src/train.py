@@ -3,8 +3,7 @@ import tensorflow as tf
 
 from src.make_model import seq_model
 from src.settings import *
-from src.utils import f1_m, precision_m, recall_m
-
+from src.utils import f1_scores_1, f1_scores_2, f1_scores_3
 
 def _extract_feature(record, feature):
     example = tf.train.Example.FromString(record.numpy())
@@ -97,7 +96,7 @@ def main(n_epochs, batch_size):
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
-    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_m, precision_m, recall_m])
+    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=["accuracy", f1_scores_1, f1_scores_2, f1_scores_3])
 
     csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))
 

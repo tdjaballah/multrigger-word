@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import random
 import seaborn as sns
-import tensorflow as tf
 
 from src.settings import *
 from src.utils import *
@@ -130,7 +129,9 @@ def insert_audio_clip(background, audio_clip, previous_segments):
             return background, (background_duration_ms, background_duration_ms)
 
     previous_segments.append(segment_time)
-    new_background = background.overlay(audio_clip, position=segment_time[0])
+
+    new_background = background[:segment_time[0]+CROSSFADE_MS].append(audio_clip, crossfade=CROSSFADE_MS)
+    new_background = new_background.append(background[segment_time[1]-CROSSFADE_MS:], crossfade=CROSSFADE_MS)
 
     return new_background, segment_time
 
@@ -213,8 +214,8 @@ def create_training_example(background, background_duration_ms, positives, negat
 
     background = cut_audio_segment(background, background_duration_ms)
 
-    # Make background quieter
-    background = match_target_amplitude(background, -45)
+    #Standardize background volume
+    background = match_target_amplitude(background, -20)
 
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
     y = np.zeros((TY, N_CLASSES))
@@ -225,37 +226,32 @@ def create_training_example(background, background_duration_ms, positives, negat
 
     # Select 0-2 random "activate" audio clips from the entire list of "activates" recordings for 10 seconds record
     number_of_sound_to_add = np.random.randint(1, 3 * background_duration_ms / 5000)
+
     for i in range(number_of_sound_to_add):
 
-        if np.random.random() > 1 / 3:
-
-            # Take random positive with random label and get the right amplitude
-            y_label, label = random.choice(list(enumerate(sorted(list(positives.keys())))))
-            if MULTRIGGER_MODE:
-                y_label += 1
-            else:
-                y_label = 1
-            random_positive = random.choice(positives[label])
-            random_positive = match_target_amplitude(random_positive, -20.0)
-            # Insert the audio clip on the background
-            background, segment_time = insert_audio_clip(background, random_positive, previous_segments)
-
-            # Retrieve segment_start and segment_end from segment_time
-            segment_start, segment_end = segment_time
-            # Insert labels in "y"
-            y = insert_ones(y, y_label, segment_end, background_duration_ms)
-
+        # Take random positive with random label and get the right amplitude
+        y_label, label = random.choice(list(enumerate(sorted(list(positives.keys())))))
+        if MULTRIGGER_MODE:
+            y_label += 1
         else:
+            y_label = 1
+        random_positive = random.choice(positives[label])
+        random_positive = match_target_amplitude(random_positive, -20.0)
 
-            # Take random negative and get the right amplitude
-            random_negative = random.choice(negatives)
-            random_negative = match_target_amplitude(random_negative, -20.0)
-            background, _ = insert_audio_clip(background, random_negative, previous_segments)
+        # Insert the audio clip on the background
+        background, segment_time = insert_audio_clip(background, random_positive, previous_segments)
+
+        # Retrieve segment_start and segment_end from segment_time
+        segment_start, segment_end = segment_time
+
+        # Insert labels in "y"
+        y = insert_ones(y, y_label, segment_end, background_duration_ms)
 
     # Standardize the volume of the audio clip
     background = match_target_amplitude(background, -20.0)
 
     if export and (n_export % 50 == 0):
+
         # Export new training example
         file_name = "{}/sample-{}".format(INTERIM_DATA_DIR, n_export)
         background.export(file_name + ".wav", format="wav")

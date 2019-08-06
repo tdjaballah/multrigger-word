@@ -31,7 +31,7 @@ def seq_model(input_shape, n_classes, kernel_size, stride):
     X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
 
     # Step 4: Time-distributed dense layer (≈1 line)
-    X = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(n_classes, activation="sigmoid"))(X)  # time distributed  (sigmoid)
+    X = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(n_classes, activation="softmax"))(X)  # time distributed (sigmoid)
 
     model = tf.keras.models.Model(inputs=X_input, outputs=X)
 

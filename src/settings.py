@@ -23,6 +23,7 @@ CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
 N_CORES = multiprocessing.cpu_count()
 
 SAMPLE_DURATION_MS = 5000
+CROSSFADE_MS = 100
 N_DEV_SAMPLES = 300
 N_VAL_SAMPLES = int(N_DEV_SAMPLES / 4)
 

@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import os
-import tensorflow.keras.backend as K
+import tensorflow as tf
 
 from pydub import AudioSegment
 from scipy.io import wavfile
@@ -20,7 +20,7 @@ def graph_spectrogram(wav_file):
     nchannels = data.ndim
     if nchannels == 1:
         pxx, freqs, bins, im = plt.specgram(data, nfft, fs, noverlap = noverlap)
-    elif nchannels == 2:
+    else:
         pxx, freqs, bins, im = plt.specgram(data[:, 0], nfft, fs, noverlap = noverlap)
     return pxx
 
@@ -57,61 +57,87 @@ def load_raw_audio():
     return activates, negatives, backgrounds
 
 
-def precision_m(y_true, y_pred):
-    """Precision metric.
-    Only computes a batch-wise average of precision.
-    Computes the precision, a metric for multi-label classification of
-    how many selected items are relevant.
+def f1_scores_1(y_true, y_pred):
+    """Computes 3 different f1 scores (micro, macro, weighted).
+    micro: f1-score based on overall precision and recall
+    macro: average f1-score on all classes
+    weighted: weighted average of f1-scores on all classes, using the number of supporting observations of each class
+    Args:
+        y_true (Tensor): predictions, same shape as y
+        y_pred (Tensor): labels, with shape (batch_size, num_classes)
+        thresh: probability value beyond which we predict positive
+    Returns:
+        tuple(Tensor): (micro, macro, weighted) tuple of the computed f1 scores
     """
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-    precision = true_positives / (predicted_positives + K.epsilon())
-    return precision
+    f1s = [0, 0, 0]
+
+    y_pred = tf.cast(tf.round(y_pred), tf.float32)
+    for i, axis in enumerate([None, 0]):
+        TP = tf.cast(tf.count_nonzero(y_pred * y_true, axis=axis), tf.float32)
+        FP = tf.cast(tf.count_nonzero(y_pred * (1 - y_true), axis=axis), tf.float32)
+        FN = tf.cast(tf.count_nonzero((1 - y_pred) * y_true, axis=axis), tf.float32)
+        precision = TP / (TP + FP + 1e-16)
+        recall = TP / (TP + FN + 1e-16)
+        f1 = 2 * precision * recall / (precision + recall + 1e-16)
+        f1s[i] = tf.reduce_mean(f1)
+    weights = tf.reduce_sum(y_pred, axis=0)
+    weights /= tf.reduce_sum(weights)
+    f1s[2] = tf.reduce_sum(f1 * weights)
+    return f1s[0]
 
 
-def recall_m(y_true, y_pred):
-    """Recall metric.
-    Only computes a batch-wise average of recall.
-    Computes the recall, a metric for multi-label classification of
-    how many relevant items are selected.
+def f1_scores_2(y_true, y_pred):
+    """Computes 3 different f1 scores (micro, macro, weighted).
+    micro: f1-score based on overall precision and recall
+    macro: average f1-score on all classes
+    weighted: weighted average of f1-scores on all classes, using the number of supporting observations of each class
+    Args:
+        y_true (Tensor): predictions, same shape as y
+        y_pred (Tensor): labels, with shape (batch_size, num_classes)
+        thresh: probability value beyond which we predict positive
+    Returns:
+        tuple(Tensor): (micro, macro, weighted) tuple of the computed f1 scores
     """
-    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
-    recall = true_positives / (possible_positives + K.epsilon())
-    return recall
+    f1s = [0, 0, 0]
+
+    y_pred = tf.cast(tf.round(y_pred), tf.float32)
+    for i, axis in enumerate([None, 0]):
+        TP = tf.cast(tf.count_nonzero(y_pred * y_true, axis=axis), tf.float32)
+        FP = tf.cast(tf.count_nonzero(y_pred * (1 - y_true), axis=axis), tf.float32)
+        FN = tf.cast(tf.count_nonzero((1 - y_pred) * y_true, axis=axis), tf.float32)
+        precision = TP / (TP + FP + 1e-16)
+        recall = TP / (TP + FN + 1e-16)
+        f1 = 2 * precision * recall / (precision + recall + 1e-16)
+        f1s[i] = tf.reduce_mean(f1)
+    weights = tf.reduce_sum(y_pred, axis=0)
+    weights /= tf.reduce_sum(weights)
+    f1s[2] = tf.reduce_sum(f1 * weights)
+    return f1s[1]
 
 
-def fbeta_score_m(y_true, y_pred, beta=1):
-    """Computes the F score.
-    The F score is the weighted harmonic mean of precision and recall.
-    Here it is only computed as a batch-wise average, not globally.
-    This is useful for multi-label classification, where input samples can be
-    classified as sets of labels. By only using accuracy (precision) a model
-    would achieve a perfect score by simply assigning every class to every
-    input. In order to avoid this, a metric should penalize incorrect class
-    assignments as well (recall). The F-beta score (ranged from 0.0 to 1.0)
-    computes this, as a weighted mean of the proportion of correct class
-    assignments vs. the proportion of incorrect class assignments.
-    With beta = 1, this is equivalent to a F-measure. With beta < 1, assigning
-    correct classes becomes more important, and with beta > 1 the metric is
-    instead weighted towards penalizing incorrect class assignments.
+def f1_scores_3(y_true, y_pred):
+    """Computes 3 different f1 scores (micro, macro, weighted).
+    micro: f1-score based on overall precision and recall
+    macro: average f1-score on all classes
+    weighted: weighted average of f1-scores on all classes, using the number of supporting observations of each class
+    Args:
+        y_true (Tensor): predictions, same shape as y
+        y_pred (Tensor): labels, with shape (batch_size, num_classes)
+    Returns:
+        tuple(Tensor): (micro, macro, weighted) tuple of the computed f1 scores
     """
-    if beta < 0:
-        raise ValueError('The lowest choosable beta is zero (only precision).')
+    f1s = [0, 0, 0]
 
-    # If there are no true positives, fix the F score at 0 like sklearn.
-    if K.sum(K.round(K.clip(y_true, 0, 1))) == 0:
-        return 0
-
-    p = precision_m(y_true, y_pred)
-    r = recall_m(y_true, y_pred)
-    bb = beta ** 2
-    fbeta_score_m = (1 + bb) * (p * r) / (bb * p + r + K.epsilon())
-    return fbeta_score_m
-
-
-def f1_m(y_true, y_pred):
-    """Computes the f-measure, the harmonic mean of precision and recall.
-        Here it is only computed as a batch-wise average, not globally.
-        """
-    return fbeta_score_m(y_true, y_pred, beta=1)
+    y_pred = tf.cast(tf.round(y_pred), tf.float32)
+    for i, axis in enumerate([None, 0]):
+        TP = tf.cast(tf.count_nonzero(y_pred * y_true, axis=axis), tf.float32)
+        FP = tf.cast(tf.count_nonzero(y_pred * (1 - y_true), axis=axis), tf.float32)
+        FN = tf.cast(tf.count_nonzero((1 - y_pred) * y_true, axis=axis), tf.float32)
+        precision = TP / (TP + FP + 1e-16)
+        recall = TP / (TP + FN + 1e-16)
+        f1 = 2 * precision * recall / (precision + recall + 1e-16)
+        f1s[i] = tf.reduce_mean(f1)
+    weights = tf.reduce_sum(y_pred, axis=0)
+    weights /= tf.reduce_sum(weights)
+    f1s[2] = tf.reduce_sum(f1 * weights)
+    return f1s[2]
