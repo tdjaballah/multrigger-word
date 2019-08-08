@@ -5,6 +5,7 @@ from src.make_model import seq_model
 from src.settings import *
 from src.utils import f1_scores_1, f1_scores_2, f1_scores_3, _soft_f1_macro
 
+
 def _extract_feature(record, feature):
     example = tf.train.Example.FromString(record.numpy())
     return example.features.feature[feature].float_list.value
@@ -22,7 +23,7 @@ def _parse_function(record):
     """
     features = {
         "X": tf.FixedLenFeature(shape=[TX, FX], dtype=tf.float32),  # terms are strings of varying lengths
-        "Y": tf.FixedLenFeature(shape=[TY, 2], dtype=tf.float32)  # labels are 0 or 1
+        "Y": tf.FixedLenFeature(shape=[TY, N_CLASSES], dtype=tf.float32)  # labels are 0 or 1
     }
 
     parsed_features = tf.parse_single_example(record, features)
@@ -69,7 +70,7 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
     :return: tf.Dataset
     """
     dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=N_CORES)
-    dataset = dataset.map(_parse_function,  num_parallel_calls=N_CORES)
+    dataset = dataset.map(_parse_function, num_parallel_calls=N_CORES)
     dataset = dataset.shuffle(buffer_size=int(5*batch_size)+1)
     dataset = dataset.batch(batch_size)
     dataset = dataset.prefetch(5)

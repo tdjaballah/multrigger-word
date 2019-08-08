@@ -35,7 +35,7 @@ TX = int(FRAME_RATE * 0.0195)
 FX = int(NFFT / 2) + 1
 TY = round((TX - KERNEL_SIZE + STRIDE) / STRIDE)
 
-MULTRIGGER_MODE = False
+MULTRIGGER_MODE = True
 
 if MULTRIGGER_MODE:
     N_CLASSES = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
