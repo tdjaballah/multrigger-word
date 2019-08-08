@@ -141,3 +141,25 @@ def f1_scores_3(y_true, y_pred):
     weights /= tf.reduce_sum(weights)
     f1s[2] = tf.reduce_sum(f1 * weights)
     return f1s[2]
+
+
+def _soft_f1_macro(y_hat, y):
+    """Computes the soft macro f1-score (average f1-score when we consider probability predictions for each class)
+    Args:
+        y_hat (Tensor): predictions, same shape as y
+        y (Tensor): labels, with shape (batch_size, num_classes)
+    Returns:
+        tuple(Tensor): (micro, macro, weighted) tuple of the computed f1 scores
+    """
+    y = tf.cast(y, tf.float32)
+    y_hat = tf.cast(y_hat, tf.float32)
+    TP = tf.reduce_sum(y_hat * y, axis=0)
+    FP = tf.reduce_sum(y_hat * (1 - y), axis=0)
+    FN = tf.reduce_sum((1 - y_hat) * y, axis=0)
+    precision = TP / (TP + FP + 1e-16)
+    recall = TP / (TP + FN + 1e-16)
+    f1 = 2 * precision * recall / (precision + recall + 1e-16)
+    # reduce 1-f1 in order to increase f1
+    soft_f1 = 1 - f1
+    soft_f1 = tf.reduce_mean(soft_f1)
+    return soft_f1
