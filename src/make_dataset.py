@@ -1,11 +1,9 @@
 import logging
 import matplotlib.mlab as mlab
-import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import random
 import seaborn as sns
-import time
 import uuid
 
 from src.settings import *
@@ -298,8 +296,8 @@ def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives
 
     examples = []
 
-    for i in range(100):
-        if i == 99:
+    for i in range(N_SAMPLES_IN_TFRECORD):
+        if i == N_SAMPLES_IN_TFRECORD - 1:
             export = True
         else:
             export = False
@@ -331,11 +329,11 @@ def main(n_dev_samples, n_val_samples):
     files_to_delete.extend(sample_files)
     clean_data_dir(files_to_delete)
 
-    for i in range(n_dev_samples // 100):
+    for i in range(n_dev_samples // N_SAMPLES_IN_TFRECORD):
         create_one_tf_record(DEV_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "dev")
         print("dev", i)
 
-    for i in range(n_val_samples // 100):
+    for i in range(n_val_samples // N_SAMPLES_IN_TFRECORD):
         create_one_tf_record(VAL_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "val")
         print("val", i)
 
