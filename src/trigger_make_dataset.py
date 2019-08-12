@@ -1,6 +1,4 @@
 import logging
-import matplotlib.mlab as mlab
-import numpy as np
 import pandas as pd
 import random
 import seaborn as sns
@@ -11,73 +9,7 @@ from src.utils import *
 
 
 # Load a wav file
-def get_wav_info(wav_file):
-    rate, data = wavfile.read(wav_file)
-    return rate, data
-
-
-def get_spectrogram(data, fs=2):
-    """
-    Get spectrogram from raw audio data
-    :param data: raw audio data
-    :param fs:
-    :return:
-    """
-
-    nchannels = data.ndim
-
-    if nchannels > 1:
-        data = data[:, 0]
-
-    pxx, _, _ = mlab.specgram(data, NFFT, fs, noverlap=int(NFFT / 2))
-
-    return pxx
-
-
-def spectrogram_from_file(wav_file, fs=2):
-    """
-    Calculate and plot spectrogram for a wav audio file
-    :param wav_file: path to the wav file
-    :param fs: Sampling frequencies
-    :return: spectrogram
-    """
-    rate, data = get_wav_info(wav_file)
-
-    return get_spectrogram(data, fs)
-
-
-# Load raw audio files for speech synthesis
-def load_raw_audio():
-    positives = {}
-    backgrounds = []
-
-    for filepath in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR)):
-        label = filepath.split("/")[-2]
-        positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
-        positive = match_target_amplitude(positive, -20.0)
-        positives.setdefault(label, [])
-        positives[label].append(positive)
-
-    for filepath in glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR)):
-        background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
-        background = match_target_amplitude(background, -20.0)
-        backgrounds.append(background)
-
-    return positives, backgrounds
-
-
-def get_random_time_segment(segment_ms, background_duration_ms):
-    """
-    Gets a random time segment of duration segment_ms in a 10,000 ms audio clip.
-    :param segment_ms: the duration of the audio clip in ms ("ms" stands for "milliseconds")
-    :param background_duration_ms: the background duration of the audio clip in ms
-    :return: tuple of (segment_start, segment_end) in ms
-    """
-
-    segment_start = np.random.randint(low=0, high=background_duration_ms - segment_ms)
-    segment_end = segment_start + segment_ms - 1
-
-    return segment_start, segment_end
+from src.utils import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram, serialize_example
 
 
 def is_overlapping(segment_time, previous_segments):
@@ -132,33 +64,6 @@ def insert_audio_clip(background, audio_clip, previous_segments):
     new_background = new_background.append(background[segment_time[1]-CROSSFADE_MS:], crossfade=CROSSFADE_MS)
 
     return new_background, segment_time
-
-
-def cut_audio_segment(audio_segment, targeted_duration):
-    """
-    Cut the audio segment to the targeted duration randomly
-    :param audio_segment: audio segment to cut
-    :param targeted_duration: targeted_duration
-    :return: the truncated audio segment
-    """
-    duration = len(audio_segment)
-    if targeted_duration < duration:
-        segment_start = np.random.randint(low=0, high=duration-targeted_duration)
-        segment_end = segment_start + targeted_duration - 1
-        return audio_segment[segment_start:segment_end]
-    else:
-        return audio_segment
-
-
-def match_target_amplitude(sound, target_dBFS):
-    """
-    Used to standardize volume of audio clip
-    :param sound: sound to standardize
-    :param target_dBFS: targeted volume
-    :return: standardized sound
-    """
-    change_in_dBFS = target_dBFS - sound.dBFS
-    return sound.apply_gain(change_in_dBFS)
 
 
 def insert_ones(y, y_label, segment_end_ms, background_duration_ms, label_duration):
@@ -255,30 +160,9 @@ def create_training_example(background, background_duration_ms, label_duration, 
         sns.relplot(x='x', y='y', row='trigger', hue='label', data=df_y, kind='line', legend="full").savefig(file_name + ".png")
 
     background = np.array(background.get_array_of_samples())
-    x = get_spectrogram(background)
+    x = np.swapaxes(get_spectrogram(background), 0, 1)
 
-    return np.swapaxes(x, 0, 1).reshape(-1), y.reshape(-1)
-
-
-def _dtype_feature(nparray):
-    """match appropriate tf.train.Feature class with dtype of ndarray. """
-    dtype_ = nparray.dtype
-    if dtype_ == np.float64 or dtype_ == np.float32:
-        return tf.train.Feature(float_list=tf.train.FloatList(value=nparray))
-    elif dtype_ == np.int64:
-        return tf.train.Feature(int64_list=tf.train.Int64List(value=nparray))
-
-
-def serialize_example(x, y):
-    d_feature = {
-        'X': _dtype_feature(x),
-        'Y': _dtype_feature(y)
-    }
-
-    features = tf.train.Features(feature=d_feature)
-    example = tf.train.Example(features=features)
-
-    return example.SerializeToString()
+    return x.reshape(-1), y.reshape(-1)
 
 
 def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives, backgrounds, type_set):
@@ -336,15 +220,15 @@ def main(n_dev_samples, n_val_samples):
     clean_data_dir(files_to_delete)
 
     for i in range(n_dev_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(DEV_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "dev")
+        create_one_tf_record(DEV_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "dev")
         print("dev", i)
 
     for i in range(n_val_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(VAL_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "val")
+        create_one_tf_record(VAL_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "val")
         print("val", i)
 
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(n_dev_samples=N_DEV_SAMPLES, n_val_samples=N_VAL_SAMPLES)
+    main(n_dev_samples=N_TRIGGER_DEV_SAMPLES, n_val_samples=N_TRIGGER_VAL_SAMPLES)

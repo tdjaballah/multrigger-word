@@ -1,9 +1,17 @@
+import glob
 import matplotlib.pyplot as plt
+import numpy
+import numpy as np
 import os
+
+import tensorflow
 import tensorflow as tf
 
+from matplotlib import mlab as mlab
 from pydub import AudioSegment
 from scipy.io import wavfile
+
+from src.settings import RAW_DATA_DIR, FRAME_RATE, NFFT
 
 
 def clean_data_dir(files):
@@ -29,12 +37,6 @@ def graph_spectrogram(wav_file):
 def get_wav_info(wav_file):
     rate, data = wavfile.read(wav_file)
     return rate, data
-
-
-# Used to standardize volume of audio clip
-def match_target_amplitude(sound, target_dBFS):
-    change_in_dBFS = target_dBFS - sound.dBFS
-    return sound.apply_gain(change_in_dBFS)
 
 
 def f1_scores_1(y_true, y_pred):
@@ -143,3 +145,107 @@ def _soft_f1_macro(y_hat, y):
     soft_f1 = 1 - f1
     soft_f1 = tf.reduce_mean(soft_f1)
     return soft_f1
+
+
+def load_raw_audio():
+    positives = {}
+    backgrounds = []
+
+    for filepath in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR)):
+        label = filepath.split("/")[-2]
+        positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
+        positive = match_target_amplitude(positive, -20.0)
+        positives.setdefault(label, [])
+        positives[label].append(positive)
+
+    for filepath in glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR)):
+        background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
+        background = match_target_amplitude(background, -20.0)
+        backgrounds.append(background)
+
+    return positives, backgrounds
+
+
+def get_random_time_segment(segment_ms, background_duration_ms):
+    """
+    Gets a random time segment of duration segment_ms in a 10,000 ms audio clip.
+    :param segment_ms: the duration of the audio clip in ms ("ms" stands for "milliseconds")
+    :param background_duration_ms: the background duration of the audio clip in ms
+    :return: tuple of (segment_start, segment_end) in ms
+    """
+
+    segment_start = np.random.randint(low=0, high=background_duration_ms - segment_ms)
+    segment_end = segment_start + segment_ms - 1
+
+    return segment_start, segment_end
+
+
+def cut_audio_segment(audio_segment, targeted_duration):
+    """
+    Cut the audio segment to the targeted duration randomly
+    :param audio_segment: audio segment to cut
+    :param targeted_duration: targeted_duration
+    :return: the truncated audio segment
+    """
+    duration = len(audio_segment)
+    if targeted_duration < duration:
+        segment_start = np.random.randint(low=0, high=duration-targeted_duration)
+        segment_end = segment_start + targeted_duration - 1
+        return audio_segment[segment_start:segment_end]
+    else:
+        return audio_segment
+
+
+def match_target_amplitude(sound, target_dBFS):
+    """
+    Used to standardize volume of audio clip
+    :param sound: sound to standardize
+    :param target_dBFS: targeted volume
+    :return: standardized sound
+    """
+    change_in_dBFS = target_dBFS - sound.dBFS
+    return sound.apply_gain(change_in_dBFS)
+
+
+def get_spectrogram(data, fs=2):
+    """
+    Get spectrogram from raw audio data
+    :param data: raw audio data
+    :param fs:
+    :return:
+    """
+
+    nchannels = data.ndim
+
+    if nchannels > 1:
+        data = data[:, 0]
+
+    pxx, _, _ = mlab.specgram(data, NFFT, fs, noverlap=int(NFFT / 2))
+
+    return pxx
+
+
+def _dtype_feature(nparray):
+    """match appropriate tf.train.Feature class with dtype of ndarray. """
+    dtype_ = nparray.dtype
+    if dtype_ == np.float64 or dtype_ == np.float32:
+        return tf.train.Feature(float_list=tf.train.FloatList(value=nparray))
+    elif dtype_ == np.int64:
+        return tf.train.Feature(int64_list=tf.train.Int64List(value=nparray))
+
+
+def serialize_example(x, y):
+    d_feature = {
+        'X': _dtype_feature(x),
+        'Y': _dtype_feature(y)
+    }
+
+    features = tf.train.Features(feature=d_feature)
+    example = tf.train.Example(features=features)
+
+    return example.SerializeToString()
+
+
+def _extract_feature(record, feature):
+    example = tf.train.Example.FromString(record.numpy())
+    return example.features.feature[feature].float_list.value

@@ -7,7 +7,7 @@ import time
 
 from queue import Queue
 
-from src.make_model import seq_model
+from src.make_model import trigger_model
 from src.settings import *
 
 
@@ -18,10 +18,10 @@ def load_model(weights_dir):
     :return: our sequence model with weights
     """
     latest = tf.train.latest_checkpoint(str(weights_dir))
-    model = seq_model(input_shape=(TX, FX),
-                      n_classes=N_WORDS,
-                      kernel_size=KERNEL_SIZE,
-                      stride=STRIDE)
+    model = trigger_model(input_shape=(TX, FX),
+                          n_classes=N_WORDS,
+                          kernel_size=KERNEL_SIZE,
+                          stride=STRIDE)
 
     model.load_weights(latest)
 
@@ -112,7 +112,7 @@ def get_spectrogram(data):
 
 def main():
 
-    model = load_model(CHECKPOINT_DIR)
+    model = load_model(TRIGGER_CHECKPOINT_DIR)
     print(type(model))
 
     # Queue to communicate between the audio callback and main thread

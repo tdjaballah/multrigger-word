@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-def seq_model(input_shape, n_classes, kernel_size, stride):
+def trigger_model(input_shape, n_classes, kernel_size, stride):
     """
     Function creating the model's graph in Keras.
 
@@ -15,19 +15,13 @@ def seq_model(input_shape, n_classes, kernel_size, stride):
     X_input = tf.keras.layers.Input(shape=input_shape)
 
     # Step 1: CONV layer (≈4 lines)
-    X = tf.keras.layers.Conv1D(512, kernel_size=15, strides=4)(X_input)  # CONV1D
-    X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
-    X = tf.keras.layers.Activation('relu')(X)  # ReLu activation
-    X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
-
-    # Step 1: CONV layer (≈4 lines)
-    X = tf.keras.layers.Conv1D(256, kernel_size=15, padding='same')(X)  # CONV1D
+    X = tf.keras.layers.Conv1D(512, kernel_size=kernel_size, strides=stride)(X_input)  # CONV1D
     X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
     X = tf.keras.layers.Activation('relu')(X)  # ReLu activation
     X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
 
     # Step 2: First GRU Layer (≈4 lines)
-    X = tf.keras.layers.GRU(units=512, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
+    X = tf.keras.layers.GRU(units=256, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
     X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
     X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
 

@@ -1,14 +1,9 @@
 import logging
 import tensorflow as tf
 
-from src.make_model import seq_model
+from src.make_model import trigger_model
 from src.settings import *
 from src.utils import f1_scores_1, f1_scores_2, f1_scores_3, _soft_f1_macro
-
-
-def _extract_feature(record, feature):
-    example = tf.train.Example.FromString(record.numpy())
-    return example.features.feature[feature].float_list.value
 
 
 def _parse_function(record):
@@ -22,17 +17,14 @@ def _parse_function(record):
         labels: A tensor with the corresponding labels.
     """
     features = {
-        "X": tf.FixedLenFeature(shape=[TX, FX], dtype=tf.float32),  # terms are strings of varying lengths
-        "Y": tf.FixedLenFeature(shape=[TY, N_WORDS], dtype=tf.float32)
+        "X": tf.FixedLenFeature(shape=[343, 257], dtype=tf.float32),  # terms are strings of varying lengths
+        "Y": tf.FixedLenFeature(shape=[20], dtype=tf.float32)
     }
 
     parsed_features = tf.parse_single_example(record, features)
 
     X = parsed_features['X']
     Y = parsed_features['Y']
-
-    if not MULTRIGGER_MODE:
-        Y = tf.stack([Y[:, 0], tf.reduce_sum(Y[:, 1:], 1)], axis=1)
 
     return X, Y
 
@@ -57,27 +49,27 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
 
 def main(n_epochs, batch_size):
 
-    train_steps_per_epoch = int(N_DEV_SAMPLES / batch_size)
-    val_steps_per_epoch = int(N_VAL_SAMPLES / batch_size)
+    train_steps_per_epoch = int(N_TRIGGER_DEV_SAMPLES / batch_size)
+    val_steps_per_epoch = int(N_TRIGGER_VAL_SAMPLES / batch_size)
 
-    dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_PROCESSED_DATA_DIR))
+    dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_CLASSIF_PROCESSED_DATA_DIR))
     training_set = dataset_input_fn(dev_tfrecord_files, batch_size)
 
-    val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_PROCESSED_DATA_DIR))
+    val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_CLASSIF_PROCESSED_DATA_DIR))
     validation_set = dataset_input_fn(val_tfrecord_files, batch_size)
 
-    model = seq_model(input_shape=(TX, FX),
-                      n_classes=N_CLASSES,
-                      kernel_size=KERNEL_SIZE,
-                      stride=STRIDE)
+    model = trigger_model(input_shape=(343, 257),
+                          n_classes=20,
+                          kernel_size=KERNEL_SIZE,
+                          stride=STRIDE)
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
     model.compile(loss=_soft_f1_macro, optimizer=opt, metrics=["accuracy", f1_scores_1, f1_scores_2, f1_scores_3])
 
-    csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))
+    csv_logger = tf.keras.callbacks.CSVLogger(str(TRIGGER_TRAINING_LOG_FILE))
 
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(CHECKPOINT_FILES,
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(TRIGGER_CHECKPOINT_FILES,
                                                      verbose=1,
                                                      save_weights_only=True,
                                                      period=5)
@@ -95,4 +87,4 @@ def main(n_epochs, batch_size):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(EPOCHS, BATCH_SIZE)
+    main(TRIGGER_EPOCHS, TRIGGER_BATCH_SIZE)
