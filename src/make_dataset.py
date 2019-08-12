@@ -186,14 +186,18 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms, label_durati
     return y
 
 
-def transform_labels(y):
+def transform_labels(y, map_dict):
     """
     Save figure in sample dir to visualize our generated labels
     :param y: ndarray of shape (TY, N_CLASSES)
     :return: save file png
     """
     df = pd.DataFrame(y)
-    return pd.concat([pd.DataFrame({'col': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
+    df = pd.concat([pd.DataFrame({'label': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
+    df['trigger'] = df['label'] != 0
+    df['label'] = df['label'].map(map_dict)
+
+    return df
 
 
 def create_training_example(background, background_duration_ms, label_duration, positives, positive_labels, type_set, export, hashcode):
@@ -210,6 +214,9 @@ def create_training_example(background, background_duration_ms, label_duration, 
     y -- the label at each time step of the spectrogram
     """
 
+    map_dict = dict(enumerate(positive_labels, 1))
+    map_dict[0] = "background"
+
     background = cut_audio_segment(background, background_duration_ms)
 
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
@@ -225,8 +232,7 @@ def create_training_example(background, background_duration_ms, label_duration, 
     for i in range(number_of_sound_to_add):
 
         # Take random positive with random label and get the right amplitude
-        y_label, label = random.choice(list(enumerate(positive_labels)))
-        y_label += 1
+        y_label, label = random.choice(list(enumerate(positive_labels, 1)))
         random_positive = random.choice(positives[label])
 
         # Insert the audio clip on the background
@@ -245,8 +251,8 @@ def create_training_example(background, background_duration_ms, label_duration, 
         background.export(file_name + ".wav", format="wav")
 
         #Export label as a graph
-        df_y = transform_labels(y)
-        sns.relplot(x='x', y='y', row='col', data=df_y, kind='line').savefig(file_name + ".png")
+        df_y = transform_labels(y, map_dict)
+        sns.relplot(x='x', y='y', row='trigger', hue='label', data=df_y, kind='line', legend="full").savefig(file_name + ".png")
 
     background = np.array(background.get_array_of_samples())
     x = get_spectrogram(background)
