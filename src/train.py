@@ -23,7 +23,7 @@ def _parse_function(record):
     """
     features = {
         "X": tf.FixedLenFeature(shape=[TX, FX], dtype=tf.float32),  # terms are strings of varying lengths
-        "Y": tf.FixedLenFeature(shape=[TY, N_CLASSES], dtype=tf.float32)  # labels are 0 or 1
+        "Y": tf.FixedLenFeature(shape=[TY, N_WORDS], dtype=tf.float32)
     }
 
     parsed_features = tf.parse_single_example(record, features)
@@ -31,32 +31,8 @@ def _parse_function(record):
     X = parsed_features['X']
     Y = parsed_features['Y']
 
-    return X, Y
-
-
-# Load tf record dataset
-def parser(record):
-    """
-    parse tf record
-    :param record: the tf record to parse
-    :return: tensor
-    """
-
-    X = tf.reshape(
-        tf.py_function(
-            lambda r: _extract_feature(r, "X"),
-            (record,),
-            tf.float32
-        ), [TX, FX]
-    )
-
-    Y = tf.reshape(
-        tf.py_function(
-            lambda r: _extract_feature(r, "Y"),
-            (record,),
-            tf.float32
-        ), [TY, N_CLASSES]
-    )
+    if not MULTRIGGER_MODE:
+        Y = tf.stack([Y[:, 0], tf.reduce_sum(Y[:, 1:], 1)], axis=1)
 
     return X, Y
 

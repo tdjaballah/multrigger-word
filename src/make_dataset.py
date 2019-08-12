@@ -1,9 +1,12 @@
 import logging
 import matplotlib.mlab as mlab
+import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import random
 import seaborn as sns
+import time
+import uuid
 
 from src.settings import *
 from src.utils import *
@@ -49,23 +52,20 @@ def spectrogram_from_file(wav_file, fs=2):
 def load_raw_audio():
     positives = {}
     backgrounds = []
-    negatives = []
 
     for filepath in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR)):
         label = filepath.split("/")[-2]
         positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
+        positive = match_target_amplitude(positive, -20.0)
         positives.setdefault(label, [])
         positives[label].append(positive)
 
     for filepath in glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR)):
         background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
+        background = match_target_amplitude(background, -20.0)
         backgrounds.append(background)
 
-    for filepath in glob.glob("{}/negatives/*.wav".format(RAW_DATA_DIR)):
-        negative = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
-        negatives.append(negative)
-
-    return positives, negatives, backgrounds
+    return positives, backgrounds
 
 
 def get_random_time_segment(segment_ms, background_duration_ms):
@@ -163,7 +163,7 @@ def match_target_amplitude(sound, target_dBFS):
     return sound.apply_gain(change_in_dBFS)
 
 
-def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
+def insert_ones(y, y_label, segment_end_ms, background_duration_ms, label_duration):
     """
     Update the label vector y. The labels of the 50 output steps strictly after the end of the segment
     should be set to 1. By strictly we mean that the label of segment_end_y should be 0 while, the
@@ -172,6 +172,7 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     :pram y_label: number otf the class we have to put 1
     :param segment_end_ms: the end time of the segment in ms
     :param background_duration_ms: duration of the background in ms
+    :param label_duration: duration of the label
     :return:
     """
 
@@ -179,7 +180,7 @@ def insert_ones(y, y_label, segment_end_ms, background_duration_ms):
     segment_end_y = int(segment_end_ms * TY / background_duration_ms)
 
     # Add 1 to the correct index in the background label (y)
-    for i in range(segment_end_y + 1, segment_end_y + 51):
+    for i in range(segment_end_y, segment_end_y + label_duration):
         if i < TY:
             y[i, y_label] = 1
             y[i, 0] = 0
@@ -197,14 +198,14 @@ def transform_labels(y):
     return pd.concat([pd.DataFrame({'col': i, 'x': df.index, 'y': list(df[i])}) for i in df.columns])
 
 
-def create_training_example(background, background_duration_ms, positives, n_export, export):
+def create_training_example(background, background_duration_ms, label_duration, positives, positive_labels, type_set, export, hashcode):
     """
     Creates a training example with a given background, activates, and negatives.
 
     :param background:   background audio recording
     :param background_duration_ms: background duration we want in ms
+    :param label_duration: number of ones to add in the label
     :param positives: list of audio segments of the positives word we want to detect
-    :param n_export:
     :param export:
     :return: tuple (x,y) with
     x -- the spectrogram of the training example
@@ -213,11 +214,8 @@ def create_training_example(background, background_duration_ms, positives, n_exp
 
     background = cut_audio_segment(background, background_duration_ms)
 
-    #Standardize background volume
-    background = match_target_amplitude(background, -20)
-
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
-    y = np.zeros((TY, N_CLASSES))
+    y = np.zeros((TY, N_WORDS))
     y[:, 0] = 1
 
     # Step 2: Initialize segment times as empty list (≈ 1 line)
@@ -229,13 +227,9 @@ def create_training_example(background, background_duration_ms, positives, n_exp
     for i in range(number_of_sound_to_add):
 
         # Take random positive with random label and get the right amplitude
-        y_label, label = random.choice(list(enumerate(sorted(list(positives.keys())))))
-        if MULTRIGGER_MODE:
-            y_label += 1
-        else:
-            y_label = 1
+        y_label, label = random.choice(list(enumerate(positive_labels)))
+        y_label += 1
         random_positive = random.choice(positives[label])
-        random_positive = match_target_amplitude(random_positive, -20.0)
 
         # Insert the audio clip on the background
         background, segment_time = insert_audio_clip(background, random_positive, previous_segments)
@@ -244,15 +238,12 @@ def create_training_example(background, background_duration_ms, positives, n_exp
         segment_start, segment_end = segment_time
 
         # Insert labels in "y"
-        y = insert_ones(y, y_label, segment_end, background_duration_ms)
+        y = insert_ones(y, y_label, segment_end, background_duration_ms, label_duration)
 
-    # Standardize the volume of the audio clip
-    background = match_target_amplitude(background, -20.0)
-
-    if export and (n_export % 50 == 0):
+    if export:
 
         # Export new training example
-        file_name = "{}/sample-{}".format(INTERIM_DATA_DIR, n_export)
+        file_name = "{}/{}-{}".format(INTERIM_DATA_DIR, type_set, hashcode)
         background.export(file_name + ".wav", format="wav")
 
         #Export label as a graph
@@ -262,7 +253,7 @@ def create_training_example(background, background_duration_ms, positives, n_exp
     background = np.array(background.get_array_of_samples())
     x = get_spectrogram(background)
 
-    return np.swapaxes(x, 0, 1), y
+    return np.swapaxes(x, 0, 1).reshape(-1), y.reshape(-1)
 
 
 def _dtype_feature(nparray):
@@ -286,48 +277,44 @@ def serialize_example(x, y):
     return example.SerializeToString()
 
 
-def create_tfrecord(sample_duration_ms, n_samples, data_dir, export):
+def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives, backgrounds, type_set):
     """
-    Runs data processing scripts to turn raw audio data from (../raw/*) into
-    cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
-    :param sample_duration_ms: sample duration in ms we want
-    :param n_samples: number of samples
-    :param data_dir: dir where to write data_dir
-    :param export boolean True if you want to export sample in wav format in interim directory
+    Create one tfrecord with 50 msplae in it.
+    :param data_dir: data dir to write tfrecord
+    :param sample_duration_ms: smaple duration in milliseconds
+    :param label_duration: number of ones to put in label
+    :param raw_audio: result from load_audio_files
+    :param type_set: 'dev' or 'val' values allowed
     :return:
     """
 
-    files_to_delete = glob.glob("{}/*.tfrecord".format(data_dir))
+    hashcode = uuid.uuid4()
 
-    if export:
-        sample_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
-        files_to_delete.extend(sample_files)
+    positive_labels = sorted(positives.keys())
 
-    clean_data_dir(files_to_delete)
+    result_tf_file = "{}/{}-{}-{}.tfrecord".format(data_dir, sample_duration_ms, label_duration, hashcode)
 
-    positives, negatives, backgrounds = load_raw_audio()
-
-    i = 0
-
-    result_tf_file = "{}/{:0>5d}.tfrecord".format(data_dir, i)
     writer = tf.io.TFRecordWriter(result_tf_file)
 
-    for i in range(1, n_samples + 1):
+    examples = []
 
-        x, y = create_training_example(random.choice(backgrounds), sample_duration_ms, positives, i, export)
-        serialized_example = serialize_example(x.reshape(-1), y.reshape(-1))
-        writer.write(serialized_example)
+    for i in range(100):
+        if i == 99:
+            export = True
+        else:
+            export = False
 
-        if i % 50 == 0 and i != n_samples:
-            print(i)
-            writer.close()
-            result_tf_file = "{}/{:0>5d}.tfrecord".format(data_dir, i)
-            writer = tf.io.TFRecordWriter(result_tf_file)
+        examples.append(create_training_example(random.choice(backgrounds), sample_duration_ms,
+                                                label_duration, positives, positive_labels,
+                                                type_set, export, hashcode))
+
+    [writer.write(serialize_example(x, y)) for x, y in examples]
 
     writer.close()
 
 
-def main(sample_duration_ms, n_dev_samples, n_val_samples):
+def main(n_dev_samples, n_val_samples):
+
     """
     Runs data processing scripts to turn raw audio data from (../raw/*) into
     cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
@@ -337,11 +324,23 @@ def main(sample_duration_ms, n_dev_samples, n_val_samples):
     :return: tfrecords in specified directories
     """
 
-    create_tfrecord(sample_duration_ms, n_dev_samples, DEV_PROCESSED_DATA_DIR, export=True)
-    create_tfrecord(sample_duration_ms, n_val_samples, VAL_PROCESSED_DATA_DIR, export=False)
+    positives, backgrounds = load_raw_audio()
+
+    files_to_delete = glob.glob("{}/*/*.tfrecord".format(PROCESSED_DATA_DIR))
+    sample_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
+    files_to_delete.extend(sample_files)
+    clean_data_dir(files_to_delete)
+
+    for i in range(n_dev_samples // 100):
+        create_one_tf_record(DEV_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "dev")
+        print("dev", i)
+
+    for i in range(n_val_samples // 100):
+        create_one_tf_record(VAL_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "val")
+        print("val", i)
 
 
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(sample_duration_ms=SAMPLE_DURATION_MS, n_dev_samples=N_DEV_SAMPLES, n_val_samples=N_VAL_SAMPLES)
+    main(n_dev_samples=N_DEV_SAMPLES, n_val_samples=N_VAL_SAMPLES)

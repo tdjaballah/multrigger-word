@@ -23,8 +23,9 @@ CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
 N_CORES = multiprocessing.cpu_count()
 
 SAMPLE_DURATION_MS = 5000
+LABEL_DURATION = 25
 CROSSFADE_MS = 100
-N_DEV_SAMPLES = 300
+N_DEV_SAMPLES = 400
 N_VAL_SAMPLES = int(N_DEV_SAMPLES / 4)
 
 KERNEL_SIZE = 15
@@ -35,10 +36,12 @@ TX = int(FRAME_RATE * 0.0195)
 FX = int(NFFT / 2) + 1
 TY = round((TX - KERNEL_SIZE + STRIDE) / STRIDE)
 
-MULTRIGGER_MODE = True
+MULTRIGGER_MODE = False
+
+N_WORDS = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
 
 if MULTRIGGER_MODE:
-    N_CLASSES = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))}) + 1
+    N_CLASSES = N_WORDS
 else:
     N_CLASSES = 2
 

@@ -19,7 +19,7 @@ def load_model(weights_dir):
     """
     latest = tf.train.latest_checkpoint(str(weights_dir))
     model = seq_model(input_shape=(TX, FX),
-                      n_classes=N_CLASSES,
+                      n_classes=N_WORDS,
                       kernel_size=KERNEL_SIZE,
                       stride=STRIDE)
 
