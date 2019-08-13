@@ -1,9 +1,8 @@
 import logging
 import tensorflow as tf
 
-from src.make_model import trigger_model
+from src.make_model import siamese_model
 from src.settings import *
-from src.utils import f1_scores_1, f1_scores_2, f1_scores_3, _soft_f1_macro
 
 
 def _parse_function(record):
@@ -17,19 +16,21 @@ def _parse_function(record):
         labels: A tensor with the corresponding labels.
     """
     features = {
-        "X": tf.FixedLenFeature(shape=[343, 257], dtype=tf.float32),  # terms are strings of varying lengths
-        "Y": tf.FixedLenFeature(shape=[20], dtype=tf.float32)
+        "X_1": tf.FixedLenFeature(shape=[343, 257], dtype=tf.float32),  # terms are strings of fixed lengths
+        "X_2": tf.FixedLenFeature(shape=[343, 257], dtype=tf.float32),
+        "Y": tf.FixedLenFeature(shape=[1], dtype=tf.float32)
     }
 
     parsed_features = tf.parse_single_example(record, features)
 
-    X = parsed_features['X']
+    X_1 = parsed_features['X_1']
+    X_2 = parsed_features['X_2']
     Y = parsed_features['Y']
 
-    return X, Y
+    return (X_1, X_2), Y
 
 
-def dataset_input_fn(filenames, batch_size, num_epochs=None):
+def classif_dataset_input_fn(filenames, batch_size, num_epochs=None):
     """
     the input function we use to feed our keras model
     :param filenames: tfrecords filenames
@@ -49,39 +50,38 @@ def dataset_input_fn(filenames, batch_size, num_epochs=None):
 
 def main(n_epochs, batch_size):
 
-    train_steps_per_epoch = int(N_TRIGGER_DEV_SAMPLES / batch_size)
-    val_steps_per_epoch = int(N_TRIGGER_VAL_SAMPLES / batch_size)
+    train_steps_per_epoch = int(N_CLASSIF_DEV_SAMPLES / batch_size)
+    val_steps_per_epoch = int(N_CLASSIF_VAL_SAMPLES / batch_size)
 
     dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_CLASSIF_PROCESSED_DATA_DIR))
-    training_set = dataset_input_fn(dev_tfrecord_files, batch_size)
+    training_set = classif_dataset_input_fn(dev_tfrecord_files, batch_size)
 
     val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_CLASSIF_PROCESSED_DATA_DIR))
-    validation_set = dataset_input_fn(val_tfrecord_files, batch_size)
+    validation_set = classif_dataset_input_fn(val_tfrecord_files, batch_size)
 
-    model = trigger_model(input_shape=(343, 257),
-                          n_classes=20,
-                          kernel_size=KERNEL_SIZE,
-                          stride=STRIDE)
+    one_shot_model = siamese_model(input_shape=(343, 257),
+                                   kernel_size=KERNEL_SIZE,
+                                   stride=STRIDE)
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
-    model.compile(loss=_soft_f1_macro, optimizer=opt, metrics=["accuracy", f1_scores_1, f1_scores_2, f1_scores_3])
+    one_shot_model.compile(loss="binary_crossentropy", optimizer=opt, metrics=["accuracy"])
 
-    csv_logger = tf.keras.callbacks.CSVLogger(str(TRIGGER_TRAINING_LOG_FILE))
+    csv_logger = tf.keras.callbacks.CSVLogger(str(CLASSIF_TRAINING_LOG_FILE))
 
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(TRIGGER_CHECKPOINT_FILES,
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(CLASSIF_CHECKPOINT_FILES,
                                                      verbose=1,
                                                      save_weights_only=True,
                                                      period=5)
 
-    model.fit(training_set.make_one_shot_iterator(),
-              validation_data=validation_set.make_one_shot_iterator(),
-              validation_steps=val_steps_per_epoch,
-              steps_per_epoch=train_steps_per_epoch,
-              epochs=n_epochs,
-              callbacks=[csv_logger, cp_callback],
-              verbose=1
-              )
+    one_shot_model.fit(training_set.make_one_shot_iterator(),
+                       validation_data=validation_set.make_one_shot_iterator(),
+                       validation_steps=val_steps_per_epoch,
+                       steps_per_epoch=train_steps_per_epoch,
+                       epochs=n_epochs,
+                       callbacks=[csv_logger, cp_callback],
+                       verbose=1
+                       )
 
 
 if __name__ == '__main__':

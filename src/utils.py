@@ -1,10 +1,8 @@
 import glob
 import matplotlib.pyplot as plt
-import numpy
 import numpy as np
 import os
 
-import tensorflow
 import tensorflow as tf
 
 from matplotlib import mlab as mlab
@@ -234,9 +232,22 @@ def _dtype_feature(nparray):
         return tf.train.Feature(int64_list=tf.train.Int64List(value=nparray))
 
 
-def serialize_example(x, y):
+def trigger_serialize_example(x, y):
     d_feature = {
         'X': _dtype_feature(x),
+        'Y': _dtype_feature(y)
+    }
+
+    features = tf.train.Features(feature=d_feature)
+    example = tf.train.Example(features=features)
+
+    return example.SerializeToString()
+
+
+def classif_serialize_example(x_1, x_2, y):
+    d_feature = {
+        'X_1': _dtype_feature(x_1),
+        'X_2': _dtype_feature(x_2),
         'Y': _dtype_feature(y)
     }
 

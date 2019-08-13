@@ -9,7 +9,7 @@ from src.utils import *
 
 
 # Load a wav file
-from src.utils import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram, serialize_example
+from src.utils import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram, trigger_serialize_example
 
 
 def is_overlapping(segment_time, previous_segments):
@@ -196,7 +196,7 @@ def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives
                                                 label_duration, positives, positive_labels,
                                                 type_set, export, hashcode))
 
-    [writer.write(serialize_example(x, y)) for x, y in examples]
+    [writer.write(trigger_serialize_example(x, y)) for x, y in examples]
 
     writer.close()
 
