@@ -1,8 +1,10 @@
 import logging
 import tensorflow as tf
+import glob
 
-from src.make_model import siamese_model
-from src.settings import *
+from src.settings.general import N_CORES
+from src.settings.encode import *
+from src.models import siamese_model
 
 
 def _parse_function(record):
@@ -30,7 +32,7 @@ def _parse_function(record):
     return (X_1, X_2), Y
 
 
-def classif_dataset_input_fn(filenames, batch_size, num_epochs=None):
+def encode_dataset_input_fn(filenames, batch_size, num_epochs=None):
     """
     the input function we use to feed our keras model
     :param filenames: tfrecords filenames
@@ -50,26 +52,26 @@ def classif_dataset_input_fn(filenames, batch_size, num_epochs=None):
 
 def main(n_epochs, batch_size):
 
-    train_steps_per_epoch = int(N_CLASSIF_DEV_SAMPLES / batch_size)
-    val_steps_per_epoch = int(N_CLASSIF_VAL_SAMPLES / batch_size)
+    train_steps_per_epoch = int(N_ENCODE_DEV_SAMPLES / batch_size)
+    val_steps_per_epoch = int(N_ENCODE_VAL_SAMPLES / batch_size)
 
-    dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_CLASSIF_PROCESSED_DATA_DIR))
-    training_set = classif_dataset_input_fn(dev_tfrecord_files, batch_size)
+    dev_tfrecord_files = glob.glob("{}/*.tfrecord".format(DEV_ENCODE_PROCESSED_DATA_DIR))
+    training_set = encode_dataset_input_fn(dev_tfrecord_files, batch_size)
 
-    val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_CLASSIF_PROCESSED_DATA_DIR))
-    validation_set = classif_dataset_input_fn(val_tfrecord_files, batch_size)
+    val_tfrecord_files = glob.glob("{}/*.tfrecord".format(VAL_ENCODE_PROCESSED_DATA_DIR))
+    validation_set = encode_dataset_input_fn(val_tfrecord_files, batch_size)
 
     one_shot_model = siamese_model(input_shape=(343, 257),
-                                   kernel_size=KERNEL_SIZE,
-                                   stride=STRIDE)
+                                   kernel_size=ENCODE_KERNEL_SIZE,
+                                   stride=ENCODE_STRIDE)
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
     one_shot_model.compile(loss="binary_crossentropy", optimizer=opt, metrics=["accuracy"])
 
-    csv_logger = tf.keras.callbacks.CSVLogger(str(CLASSIF_TRAINING_LOG_FILE))
+    csv_logger = tf.keras.callbacks.CSVLogger(str(ENCODE_TRAINING_LOG_FILE))
 
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(CLASSIF_CHECKPOINT_FILES,
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(ENCODE_CHECKPOINT_FILES,
                                                      verbose=1,
                                                      save_weights_only=True,
                                                      period=5)
@@ -87,4 +89,4 @@ def main(n_epochs, batch_size):
 if __name__ == '__main__':
     log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main(TRIGGER_EPOCHS, TRIGGER_BATCH_SIZE)
+    main(ENCODE_EPOCHS, ENCODE_BATCH_SIZE)

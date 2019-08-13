@@ -1,9 +1,11 @@
+import glob
 import logging
 import tensorflow as tf
 
-from src.make_model import trigger_model
-from src.settings import *
-from src.utils import f1_scores_1, f1_scores_2, f1_scores_3, _soft_f1_macro
+from src.models import trigger_model
+from src.settings.trigger import *
+from src.settings.general import N_CORES
+from src.utils.tf_helper import f1_scores_1, f1_scores_2, f1_scores_3, _soft_f1_macro
 
 
 def _parse_function(record):
@@ -18,7 +20,7 @@ def _parse_function(record):
     """
     features = {
         "X": tf.FixedLenFeature(shape=[TX, FX], dtype=tf.float32),  # terms are strings of varying lengths
-        "Y": tf.FixedLenFeature(shape=[TY, N_WORDS], dtype=tf.float32)
+        "Y": tf.FixedLenFeature(shape=[TY, N_WORDS + 1], dtype=tf.float32)
     }
 
     parsed_features = tf.parse_single_example(record, features)
@@ -63,8 +65,8 @@ def main(n_epochs, batch_size):
 
     model = trigger_model(input_shape=(TX, FX),
                           n_classes=N_CLASSES,
-                          kernel_size=KERNEL_SIZE,
-                          stride=STRIDE)
+                          kernel_size=TRIGGER_KERNEL_SIZE,
+                          stride=TRIGGER_STRIDE)
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 

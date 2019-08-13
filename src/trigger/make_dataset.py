@@ -2,14 +2,15 @@ import logging
 import pandas as pd
 import random
 import seaborn as sns
+import numpy as np
 import uuid
+import glob
+import tensorflow as tf
 
-from src.settings import *
-from src.utils import *
-
-
-# Load a wav file
-from src.utils import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram, trigger_serialize_example
+from src.settings.trigger import *
+from src.utils.audio import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram
+from src.utils.tf_record import trigger_serialize_example
+from src.utils.misc_utils import clean_data_dir
 
 
 def is_overlapping(segment_time, previous_segments):
@@ -125,7 +126,7 @@ def create_training_example(background, background_duration_ms, label_duration, 
     background = cut_audio_segment(background, background_duration_ms)
 
     # Step 1: Initialize y (label vector) of zeros (≈ 1 line)
-    y = np.zeros((TY, N_WORDS))
+    y = np.zeros((TY, N_WORDS + 1))
     y[:, 0] = 1
 
     # Step 2: Initialize segment times as empty list (≈ 1 line)
@@ -152,7 +153,7 @@ def create_training_example(background, background_duration_ms, label_duration, 
     if export:
 
         # Export new training example
-        file_name = "{}/{}-{}".format(INTERIM_DATA_DIR, type_set, hashcode)
+        file_name = "{}/{}-{}".format(TRIGGER_INTERIM_DATA_DIR, type_set, hashcode)
         background.export(file_name + ".wav", format="wav")
 
         #Export label as a graph
@@ -165,7 +166,7 @@ def create_training_example(background, background_duration_ms, label_duration, 
     return x.reshape(-1), y.reshape(-1)
 
 
-def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives, backgrounds, type_set):
+def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives, positive_labels, background, type_set):
     """
     Create one tfrecord with 50 msplae in it.
     :param data_dir: data dir to write tfrecord
@@ -178,9 +179,7 @@ def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives
 
     hashcode = uuid.uuid4()
 
-    positive_labels = sorted(positives.keys())
-
-    result_tf_file = "{}/{}-{}-{}.tfrecord".format(data_dir, sample_duration_ms, label_duration, hashcode)
+    result_tf_file = "{}/{}.tfrecord".format(data_dir, hashcode)
 
     writer = tf.io.TFRecordWriter(result_tf_file)
 
@@ -192,7 +191,7 @@ def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives
         else:
             export = False
 
-        examples.append(create_training_example(random.choice(backgrounds), sample_duration_ms,
+        examples.append(create_training_example(background, sample_duration_ms,
                                                 label_duration, positives, positive_labels,
                                                 type_set, export, hashcode))
 
@@ -206,25 +205,27 @@ def main(n_dev_samples, n_val_samples):
     """
     Runs data processing scripts to turn raw audio data from (../raw/*) into
     cleaned tfrecord data ready to be analyzed (saved in ../processed) by trigger word neural network.
-    :param sample_duration_ms: sample duration in ms we want
     :param n_dev_samples: number of training samples
     :param n_val_samples: number of validation samples
     :return: tfrecords in specified directories
     """
 
-    positives, backgrounds = load_raw_audio()
-
-    files_to_delete = glob.glob("{}/*/*.tfrecord".format(PROCESSED_DATA_DIR))
-    sample_files = glob.glob("{}/*".format(INTERIM_DATA_DIR))
+    files_to_delete = glob.glob("{}/*/*.tfrecord".format(TRIGGER_PROCESSED_DATA_DIR))
+    sample_files = glob.glob("{}/*".format(TRIGGER_INTERIM_DATA_DIR))
     files_to_delete.extend(sample_files)
+
     clean_data_dir(files_to_delete)
 
+    positives, backgrounds = load_raw_audio()
+    positive_labels = sorted(positives.keys())
+    background = backgrounds[0]
+
     for i in range(n_dev_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(DEV_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "dev")
+        create_one_tf_record(DEV_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, positive_labels, background, "dev")
         print("dev", i)
 
     for i in range(n_val_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(VAL_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, backgrounds, "val")
+        create_one_tf_record(VAL_TRIGGER_PROCESSED_DATA_DIR, SAMPLE_DURATION_MS, LABEL_DURATION, positives, positive_labels, background, "val")
         print("val", i)
 
 
