@@ -92,14 +92,12 @@ def main(n_dev_samples, n_val_samples):
 
     clean_data_dir(files_to_delete)
 
-    targeted_duration = 2000
-
     for i in range(n_dev_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(DEV_ENCODE_PROCESSED_DATA_DIR, positives, background, targeted_duration, N_SAMPLES_IN_TFRECORD)
+        create_one_tf_record(DEV_ENCODE_PROCESSED_DATA_DIR, positives, background, ENCODE_SAMPLE_DURATION, N_SAMPLES_IN_TFRECORD)
         print("dev", i)
 
     for i in range(n_val_samples // N_SAMPLES_IN_TFRECORD):
-        create_one_tf_record(VAL_ENCODE_PROCESSED_DATA_DIR, positives, background, targeted_duration, N_SAMPLES_IN_TFRECORD)
+        create_one_tf_record(VAL_ENCODE_PROCESSED_DATA_DIR, positives, background, ENCODE_SAMPLE_DURATION, N_SAMPLES_IN_TFRECORD)
         print("val", i)
 
 
