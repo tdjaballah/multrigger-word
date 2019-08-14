@@ -29,7 +29,11 @@ def create_one_sound(cut_background, positive, export=None):
 
 def create_examples(positives, background, n_examples, targeted_duration, labels):
 
-    labels_to_pick = random.choices(labels, k=n_examples)
+    # Python 3.6
+    #labels_to_pick = random.choices(labels, k=n_examples)
+
+    # Python 3.5
+    labels_to_pick = [random.choice(labels) for i in range(n_examples)]
 
     labels_to_pick = [(label, random.choice([label, random.choice([l for l in labels if l != label])])) for label in labels_to_pick]
 

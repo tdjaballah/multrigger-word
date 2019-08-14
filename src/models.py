@@ -40,30 +40,30 @@ def trigger_model(input_shape, n_classes, kernel_size, stride):
     return model
 
 
-def encode_model(kernel_size, stride):
+def encode_model(kernel_size):
 
     model = tf.keras.models.Sequential()
 
-    model.add(tf.keras.layers.Conv1D(1024, kernel_size=kernel_size, strides=stride,
+    model.add(tf.keras.layers.Conv1D(1024, kernel_size=kernel_size,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
-    model.add(tf.keras.layers.Conv1D(512, kernel_size=kernel_size, strides=stride,
+    model.add(tf.keras.layers.Conv1D(512, kernel_size=kernel_size // 2,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
-    model.add(tf.keras.layers.Conv1D(256, kernel_size=kernel_size // 2, strides=stride // 2,
+    model.add(tf.keras.layers.Conv1D(256, kernel_size=kernel_size // 4,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(512, activation='sigmoid'))
+    model.add(tf.keras.layers.Dense(1024, activation='sigmoid'))
 
     return model
 
