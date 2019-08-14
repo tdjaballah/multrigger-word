@@ -1,179 +1,97 @@
-import logging
-import matplotlib.mlab as mlab
-import numpy as np
 import pyaudio
-import tensorflow as tf
 import time
+import pylab
+import numpy as np
 
-from queue import Queue
-
-from src.make_model import trigger_model
-from src.settings import *
+from src.settings.general import FRAME_RATE, FIGURE_DIR
 
 
-def load_model(weights_dir):
+class SWHear(object):
     """
-    Load our seq_model with the latest checkpoint
-    :param weights_dir: directory where we have our checkpoints from our training
-    :return: our sequence model with weights
-    """
-    latest = tf.train.latest_checkpoint(str(weights_dir))
-    model = trigger_model(input_shape=(TX, FX),
-                          n_classes=N_WORDS,
-                          kernel_size=KERNEL_SIZE,
-                          stride=STRIDE)
-
-    model.load_weights(latest)
-
-    return model
-
-
-def predict(model, x):
-    """
-    Function to predict the location of one of the trigger word.
-    :param x: spectrum of shape (TX, FX)
-    :return: numpy array to shape (number of output time steps)
+    The SWHear class is made to provide access to continuously recorded
+    (and mathematically processed) microphone data.
     """
 
-    x = np.expand_dims(x, axis=0)
-    predictions = model.predict(x)
+    def __init__(self):
+        """fire up the SWHear class."""
+        print(" -- initializing SWHear")
 
-    return predictions
+        self.chunk = 4096           # number of data points to read at a time
+        self.rate = FRAME_RATE      # time resolution of the recording device (Hz)
 
+        # for tape recording (continuous "tape" of recent audio)
+        self.tapeLength = 2         #seconds
+        self.tape = np.empty(self.rate*self.tapeLength)*np.nan
 
-def get_audio_input_stream(callback):
-    stream = pyaudio.PyAudio().open(
-        format=pyaudio.paInt16,
-        channels=1,
-        rate=FS,
-        input=True,
-        frames_per_buffer=CHUNK_SAMPLES,
-        input_device_index=0,
-        stream_callback=callback)
-    return stream
+        self.p = pyaudio.PyAudio()  # start the PyAudio class
+        self.stream = self.p.open(format=pyaudio.paInt16,
+                                  channels=1,
+                                  rate=self.rate, input=True,
+                                  frames_per_buffer=self.chunk)
 
+    # LOWEST LEVEL AUDIO ACCESS
+    # pure access to microphone and stream operations
+    # keep math, plotting, FFT, etc out of here.
 
-def detect_triggerword_spectrum(model, x):
-    """
-    Function to predict the location of the trigger word.
+    def stream_read(self):
+        """return values for a single chunk"""
+        data = np.fromstring(self.stream.read(self.chunk), dtype=np.int16)
 
-    :param model: neural network that is use for inference
-    :param x: spectrum of shape (TX, FX)
-    :return: predictions -- numpy ndarray to shape (number of output time steps per num_classes)
-    """
+        return data
 
-    x = np.expand_dims(x, axis=0)
-    predictions = model.predict(x)
-    return predictions.reshape(-1)
+    def stream_stop(self):
+        """close the stream but keep the PyAudio instance alive."""
+        if 'stream' in locals():
+            self.stream.stop_stream()
+            self.stream.close()
+        print(" -- stream CLOSED")
 
+    def close(self):
+        """gently detach from things."""
+        self.stream_stop()
+        self.p.terminate()
 
-def has_new_triggerword(predictions, chunk_duration, feed_duration, threshold=0.5):
-    """
-    Function to detect new trigger word in the latest chunk of input audio.
-    It is looking for the rising edge of the predictions data belongs to the
-    last/latest chunk.
+    ### TAPE METHODS
+    # tape is like a circular magnetic ribbon of tape that's continously
+    # recorded and recorded over in a loop. self.tape contains this data.
+    # the newest data is always at the end. Don't modify data on the type,
+    # but rather do math on it (like FFT) as you read from it.
 
-    :param predictions:  predicted labels from model
-    :param chunk_duration: time in second of a chunk
-    :param feed_duration: time in second of the input to model
-    :param threshold: threshold for probability above a certain to be considered positive
-    :return: True if new trigger word detected in the latest chunk
-    """
+    def tape_add(self):
+        """add a single chunk to the tape."""
+        self.tape[:-self.chunk] = self.tape[self.chunk:]
+        self.tape[-self.chunk:] = self.stream_read()
 
-    predictions = predictions > threshold
-    chunk_predictions_samples = int(len(predictions) * chunk_duration / feed_duration)
-    chunk_predictions = predictions[-chunk_predictions_samples:]
-    level = chunk_predictions[0]
-    for pred in chunk_predictions:
-        if pred > level:
-            return True
+    def tape_forever(self, plot_period=.25):
+        init = 0
+        try:
+            while True:
+                self.tape_add()
+                if (time.time()-init) > plot_period:
+                    init = time.time()
+                    self.tape_plot()
+        except:
+            print(" ~~ exception (keyboard?)")
+            return
+
+    def tape_plot(self, filename="{}/figure.png".format(FIGURE_DIR)):
+        """plot what's in the tape."""
+        pylab.plot(np.arange(len(self.tape))/self.rate,self.tape)
+        pylab.axis([0, self.tapeLength, -2**16/2, 2**16/2])
+
+        if filename:
+            t1 = time.time()
+            pylab.savefig(filename, dpi=50)
+            print("plotting saving took %.02f ms" % ((time.time()-t1)*1000))
+
         else:
-            level = pred
-    return False
+            pylab.show()
+
+        pylab.close('all')
 
 
-def get_spectrogram(data):
-    """
-    Function to compute a spectrogram.
-    :param data: one channel / dual channel audio data as numpy array
-    :return: spectrogram, 2-D array, columns are the periodograms of successive segments.
-    """
-
-    nfft = 200  # Length of each window segment
-    fs = 8000  # Sampling frequencies
-    noverlap = 120  # Overlap between windows
-    nchannels = data.ndim
-    if nchannels == 1:
-        pxx, _, _ = mlab.specgram(data, nfft, fs, noverlap=noverlap)
-    elif nchannels == 2:
-        pxx, _, _ = mlab.specgram(data[:, 0], nfft, fs, noverlap=noverlap)
-    return pxx
-
-
-def main():
-
-    model = load_model(TRIGGER_CHECKPOINT_DIR)
-    print(type(model))
-
-    # Queue to communicate between the audio callback and main thread
-    q = Queue()
-
-    run = True
-
-    silence_threshold = 100
-
-    # Run the demo for a timeout seconds
-    timeout = time.time() + 0.5 * 60  # 0.5 minutes from now
-
-    # Data buffer for the input wavform
-    data_stream = np.zeros(FEED_SAMPLES, dtype='int16')
-
-    def callback(in_data, frame_count, time_info, status):
-
-        global run, data_stream, timeout, silence_threshold
-
-        if time.time() > timeout:
-            run = False
-
-        data0 = np.frombuffer(in_data, dtype='int16')
-
-        if np.abs(data0).mean() < silence_threshold:
-            print('-')
-            return in_data, pyaudio.paContinue
-        else:
-            print('.')
-
-        data_stream = np.append(data_stream, data0)
-
-        if len(data_stream) > FEED_SAMPLES:
-            data = data_stream[-FEED_SAMPLES:]
-            # Process data async by sending a queue.
-            q.put(data)
-        return in_data, pyaudio.paContinue
-
-    stream = get_audio_input_stream(callback)
-    stream.start_stream()
-    print("start streaming")
-
-    try:
-        while run:
-            data_stream = q.get()
-            spectrum = get_spectrogram(data_stream)
-            preds = detect_triggerword_spectrum(model, spectrum)
-            new_trigger = has_new_triggerword(preds, CHUNK_DURATION, FEED_DURATION)
-            if new_trigger:
-                print('1')
-    except (KeyboardInterrupt, SystemExit):
-        stream.stop_stream()
-        stream.close()
-        timeout = time.time()
-        run = False
-
-    stream.stop_stream()
-    stream.close()
-
-
-if __name__ == '__main__':
-    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=logging.INFO, format=log_fmt)
-    main()
+if __name__ == "__main__":
+    ear = SWHear()
+    ear.tape_forever()
+    ear.close()
+    print("DONE")

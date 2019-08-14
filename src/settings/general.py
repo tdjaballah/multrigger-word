@@ -15,6 +15,7 @@ INTERIM_DATA_DIR = Path("{}/interim".format(DATA_DIR))
 PROCESSED_DATA_DIR = Path("{}/processed".format(DATA_DIR))
 
 LOG_DIR = Path("{}/logs".format(PROJECT_DIR))
+FIGURE_DIR = Path("{}/reports/figures".format(PROJECT_DIR))
 
 N_CORES = multiprocessing.cpu_count()
 
