@@ -68,12 +68,12 @@ def encode_model(kernel_size):
     return model
 
 
-def siamese_model(input_shape, kernel_size, stride):
+def siamese_model(input_shape, kernel_size):
 
     X_input_1 = tf.keras.layers.Input(shape=input_shape)
     X_input_2 = tf.keras.layers.Input(shape=input_shape)
 
-    model = encode_model(kernel_size, stride)
+    model = encode_model(kernel_size)
 
     encoded_1 = model(X_input_1)
     encoded_2 = model(X_input_2)
