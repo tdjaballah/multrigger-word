@@ -11,9 +11,9 @@ from src.settings.general import FRAME_RATE, NFFT, RAW_DATA_DIR
 def graph_spectrogram(wav_file):
 
     rate, data = get_wav_info(wav_file)
-    nfft = 200 # Length of each window segment
-    fs = 8000 # Sampling frequencies
-    noverlap = 120 # Overlap between windows
+    nfft = 200      # Length of each window segment
+    fs = 8000       # Sampling frequencies
+    noverlap = 120  # Overlap between windows
     nchannels = data.ndim
     if nchannels == 1:
         pxx, freqs, bins, im = plt.specgram(data, nfft, fs, noverlap = noverlap)

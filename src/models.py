@@ -21,7 +21,7 @@ def trigger_model(input_shape, n_classes, kernel_size, stride):
     X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
 
     # Step 2: First GRU Layer (≈4 lines)
-    X = tf.keras.layers.GRU(units=512, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
+    X = tf.keras.layers.GRU(units=256, return_sequences=True)(X)  # GRU (use 128 units and return the sequences)
     X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
     X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
 
