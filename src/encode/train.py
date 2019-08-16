@@ -62,7 +62,10 @@ def main(n_epochs, batch_size):
     validation_set = encode_dataset_input_fn(val_tfrecord_files, batch_size)
 
     one_shot_model = siamese_model(input_shape=(343, 257),
-                                   kernel_size=ENCODE_KERNEL_SIZE)
+                                   kernel_size=ENCODE_KERNEL_SIZE,
+                                   stride=ENCODE_STRIDE)
+
+    one_shot_model.save('{}/model.h5'.format(ENCODE_LOG_DIR))
 
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 

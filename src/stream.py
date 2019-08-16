@@ -2,13 +2,18 @@ import pyaudio
 import numpy as np
 import time
 import tensorflow as tf
+import pydub
 
 from matplotlib import pyplot as plt
 from matplotlib import mlab as mlab
 
 from src.settings.general import FRAME_RATE, FIGURE_DIR, NFFT
-from src.settings.trigger import TX, FX, N_CLASSES, TRIGGER_KERNEL_SIZE, TRIGGER_STRIDE
+from src.settings.trigger import TX,TY, FX, N_CLASSES, TRIGGER_KERNEL_SIZE, TRIGGER_STRIDE
 from src.models import trigger_model
+from src.utils.audio import match_target_amplitude
+
+
+SILENCE_THRESHOLD = 1000
 
 
 class SWHear(object):
@@ -27,7 +32,7 @@ class SWHear(object):
         self.model = model
         # for tape recording (continuous "tape" of recent audio)
         self.tapeLength = 5         #seconds
-        self.tape = np.empty(self.rate*self.tapeLength)*np.nan
+        self.tape = np.zeros(self.rate*self.tapeLength, dtype=np.int16)
 
         self.p = pyaudio.PyAudio()  # start the PyAudio class
         self.stream = self.p.open(format=pyaudio.paInt16,
@@ -68,7 +73,7 @@ class SWHear(object):
         self.tape[:-self.chunk] = self.tape[self.chunk:]
         self.tape[-self.chunk:] = self.stream_read()
 
-    def tape_forever(self, refresh_period=1):
+    def tape_forever(self, refresh_period=0.2):
         t1 = 0
 
         try:
@@ -93,20 +98,26 @@ class SWHear(object):
 
         plt.close('all')
 
-    def spectrogram_tape_plot(self):
+    @staticmethod
+    def spectrogram_tape_plot(data):
 
-        specgram, _, _ = mlab.specgram(self.tape, NFFT, 2, noverlap=int(NFFT / 2))
+        specgram, _, _ = mlab.specgram(data, NFFT, 2, noverlap=int(NFFT / 2))
 
         return specgram
 
     def plot_predictions(self, filename="{}/predictions.png".format(FIGURE_DIR)):
 
-        x = self.spectrogram_tape_plot()
-        np.nan_to_num(x, copy=False)
-        x = np.swapaxes(x, 0, 1)
+        x = self.tape
+
+        audio = pydub.AudioSegment(x.tobytes(), frame_rate=FRAME_RATE, channels=1, sample_width=x.dtype.itemsize)
+        audio = match_target_amplitude(audio, -20.0)
+
+        x = np.array(audio.get_array_of_samples())
+        x = np.swapaxes(self.spectrogram_tape_plot(x), 0, 1)
         x = np.expand_dims(x, axis=0)
         y = self.model.predict(x)[0]
         plt.plot(y[:, 1])
+        plt.axis([0, TY, 0, 1])
         plt.savefig(filename, dpi=50)
         plt.close('all')
 

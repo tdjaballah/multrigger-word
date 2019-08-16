@@ -40,40 +40,49 @@ def trigger_model(input_shape, n_classes, kernel_size, stride):
     return model
 
 
-def encode_model(kernel_size):
+def encode_model(kernel_size, stride):
 
     model = tf.keras.models.Sequential()
 
     model.add(tf.keras.layers.Conv1D(1024, kernel_size=kernel_size,
+                                     strides=stride,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
     model.add(tf.keras.layers.Conv1D(512, kernel_size=kernel_size // 2,
+                                     strides=stride // 2,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
     model.add(tf.keras.layers.Conv1D(256, kernel_size=kernel_size // 4,
+                                     strides=stride // 4,
+                                     bias_regularizer=tf.keras.regularizers.l2(.01)))
+    model.add(tf.keras.layers.Dropout(0.2))
+    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
+    model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
+
+    model.add(tf.keras.layers.Conv1D(128, kernel_size=kernel_size // 8,
                                      bias_regularizer=tf.keras.regularizers.l2(.01)))
     model.add(tf.keras.layers.Dropout(0.2))
     model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
     model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
 
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(1024, activation='sigmoid'))
+    model.add(tf.keras.layers.Dense(512, activation='sigmoid'))
 
     return model
 
 
-def siamese_model(input_shape, kernel_size):
+def siamese_model(input_shape, kernel_size, stride):
 
     X_input_1 = tf.keras.layers.Input(shape=input_shape)
     X_input_2 = tf.keras.layers.Input(shape=input_shape)
 
-    model = encode_model(kernel_size)
+    model = encode_model(kernel_size, stride)
 
     encoded_1 = model(X_input_1)
     encoded_2 = model(X_input_2)
@@ -87,6 +96,8 @@ def siamese_model(input_shape, kernel_size):
 
     # Connect the inputs with the outputs
     siamese_net = tf.keras.models.Model(inputs=[X_input_1, X_input_2], outputs=prediction)
+
+    print(model.summary())
 
     print(siamese_net.summary())
 

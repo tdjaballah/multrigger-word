@@ -23,3 +23,5 @@ N_WORDS = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(R
 
 FRAME_RATE = 44100
 NFFT = 512
+
+SILENCE_THRESHOLD = 200

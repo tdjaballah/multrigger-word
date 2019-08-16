@@ -68,6 +68,8 @@ def main(n_epochs, batch_size):
                           kernel_size=TRIGGER_KERNEL_SIZE,
                           stride=TRIGGER_STRIDE)
 
+    model.save('{}/model.h5'.format(TRIGGER_LOG_DIR))
+
     opt = tf.keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, decay=0.01)
 
     model.compile(loss=_soft_f1_macro, optimizer=opt, metrics=["accuracy", f1_scores_1, f1_scores_2, f1_scores_3])
