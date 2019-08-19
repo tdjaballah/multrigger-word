@@ -21,7 +21,7 @@ N_CORES = multiprocessing.cpu_count()
 
 N_WORDS = len({Path(k).parent for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))})
 
-FRAME_RATE = 44100
+FRAME_RATE = 32000
 NFFT = 512
 
 SILENCE_THRESHOLD = 200

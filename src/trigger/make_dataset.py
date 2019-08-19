@@ -133,7 +133,7 @@ def create_training_example(background, background_duration_ms, label_duration, 
     previous_segments = []
 
     # Select 0-2 random "activate" audio clips from the entire list of "activates" recordings for 10 seconds record
-    number_of_sound_to_add = np.random.randint(3 * background_duration_ms / 5000)
+    number_of_sound_to_add = np.random.randint(3)
 
     for i in range(number_of_sound_to_add):
 
