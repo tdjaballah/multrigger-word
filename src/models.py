@@ -1,11 +1,12 @@
 import tensorflow as tf
 
 
-def trigger_model(input_shape, n_classes, kernel_size, stride):
+def trigger_model(input_shape, words, n_classes, kernel_size, stride):
     """
     Function creating the model's graph in Keras.
 
     :param input_shape: shape of the model's input data (using Keras conventions)
+    :param words: tensor of words
     :param n_classes: n_classes to predict for the last dense layer
     :param kernel_size: kernel size of the first conv layer
     :param stride : stride_size of the first conv layer
@@ -38,67 +39,3 @@ def trigger_model(input_shape, n_classes, kernel_size, stride):
     print(model.summary())
 
     return model
-
-
-def encode_model(kernel_size, stride):
-
-    model = tf.keras.models.Sequential()
-
-    model.add(tf.keras.layers.Conv1D(1024, kernel_size=kernel_size,
-                                     strides=stride,
-                                     bias_regularizer=tf.keras.regularizers.l2(.01)))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
-    model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
-
-    model.add(tf.keras.layers.Conv1D(512, kernel_size=kernel_size // 2,
-                                     strides=stride // 2,
-                                     bias_regularizer=tf.keras.regularizers.l2(.01)))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
-    model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
-
-    model.add(tf.keras.layers.Conv1D(256, kernel_size=kernel_size // 4,
-                                     strides=stride // 4,
-                                     bias_regularizer=tf.keras.regularizers.l2(.01)))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
-    model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
-
-    model.add(tf.keras.layers.Conv1D(128, kernel_size=kernel_size // 8,
-                                     bias_regularizer=tf.keras.regularizers.l2(.01)))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
-    model.add(tf.keras.layers.Activation('relu'))  # ReLu activation
-
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(512, activation='sigmoid'))
-
-    return model
-
-
-def siamese_model(input_shape, kernel_size, stride):
-
-    X_input_1 = tf.keras.layers.Input(shape=input_shape)
-    X_input_2 = tf.keras.layers.Input(shape=input_shape)
-
-    model = encode_model(kernel_size, stride)
-
-    encoded_1 = model(X_input_1)
-    encoded_2 = model(X_input_2)
-
-    # Add a customized layer to compute the absolute difference between the encodings
-    L1_layer = tf.keras.layers.Lambda(lambda tensors: tf.math.abs(tensors[0] - tensors[1]))
-    L1_distance = L1_layer([encoded_1, encoded_2])
-
-    # Add a dense layer with a sigmoid unit to generate the similarity score
-    prediction = tf.keras.layers.Dense(1, activation='sigmoid')(L1_distance)
-
-    # Connect the inputs with the outputs
-    siamese_net = tf.keras.models.Model(inputs=[X_input_1, X_input_2], outputs=prediction)
-
-    print(model.summary())
-
-    print(siamese_net.summary())
-
-    return siamese_net

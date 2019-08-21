@@ -1,49 +1,64 @@
 import glob
-
 import numpy as np
-from matplotlib import pyplot as plt, mlab as mlab
+import os
+import tensorflow as tf
+
 from pydub import AudioSegment
-from scipy.io import wavfile
 
-from src.settings.general import FRAME_RATE, NFFT, RAW_DATA_DIR
-
-
-def graph_spectrogram(wav_file):
-
-    rate, data = get_wav_info(wav_file)
-    nfft = 200      # Length of each window segment
-    fs = 8000       # Sampling frequencies
-    noverlap = 120  # Overlap between windows
-    nchannels = data.ndim
-    if nchannels == 1:
-        pxx, freqs, bins, im = plt.specgram(data, nfft, fs, noverlap = noverlap)
-    else:
-        pxx, freqs, bins, im = plt.specgram(data[:, 0], nfft, fs, noverlap = noverlap)
-    return pxx
+from src.settings.general import FRAME_RATE, PROCESSED_DATA_DIR, RAW_DATA_DIR
 
 
-def get_wav_info(wav_file):
-    rate, data = wavfile.read(wav_file)
-    return rate, data
+def normalize_volume():
+    """
+    Load raw audio into pydub segment to save into wav format the normalized ones
+    :return:
+    """
+    positives_audio_files = glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))
+    negatives_audio_files = glob.glob("{}/negatives/*.wav".format(RAW_DATA_DIR))
+    background_audio_files = glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR))
+
+    audio_files = positives_audio_files + negatives_audio_files + background_audio_files
+
+    for f in audio_files:
+        audio_segment = AudioSegment.from_wav(f)
+        audio_segment = match_target_amplitude(audio_segment, -20)
+        new_filename = f.replace(str(RAW_DATA_DIR), str(PROCESSED_DATA_DIR))
+        os.makedirs(os.path.dirname(new_filename), exist_ok=True)
+        audio_segment.export(f.replace(str(RAW_DATA_DIR), str(PROCESSED_DATA_DIR)), format="wav")
 
 
-def load_raw_audio():
-    positives = {}
-    backgrounds = []
+def load_processed_audio():
+    """
+    Load  wav files into numpy array
+    :return: numpy array of smaples from pydub audiosegment
+    """
 
-    for filepath in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR)):
+    positives, negatives, backgrounds = {}, [], []
+
+    for filepath in glob.glob("{}/positives/*/*.wav".format(PROCESSED_DATA_DIR)):
         label = filepath.split("/")[-2]
-        positive = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
-        positive = match_target_amplitude(positive, -20.0)
+        positive = tf.read_file(filepath)
+        positive = tf.contrib.ffmpeg.decode_audio(positive, file_format='wav',
+                                                  samples_per_second=FRAME_RATE, channel_count=1)
+        positive = positive.numpy()
         positives.setdefault(label, [])
         positives[label].append(positive)
 
-    for filepath in glob.glob("{}/backgrounds/*.wav".format(RAW_DATA_DIR)):
-        background = AudioSegment.from_wav(filepath).set_frame_rate(FRAME_RATE).set_channels(1)
-        background = match_target_amplitude(background, -20.0)
+    for filepath in glob.glob("{}/negatives/*.wav".format(PROCESSED_DATA_DIR)):
+        negative = tf.read_file(filepath)
+        negative = tf.contrib.ffmpeg.decode_audio(negative, file_format='wav',
+                                                  samples_per_second=FRAME_RATE, channel_count=1)
+        negative = negative.numpy()
+        negatives.append(negative)
+
+    for filepath in glob.glob("{}/backgrounds/*.wav".format(PROCESSED_DATA_DIR)):
+        background = tf.read_file(filepath)
+        background = tf.contrib.ffmpeg.decode_audio(background, file_format='wav',
+                                                    samples_per_second=FRAME_RATE, channel_count=1)
+        background = background.numpy()
         backgrounds.append(background)
 
-    return positives, backgrounds
+    return positives, negatives, backgrounds
 
 
 def get_random_time_segment(segment_ms, background_duration_ms):
@@ -55,25 +70,33 @@ def get_random_time_segment(segment_ms, background_duration_ms):
     """
 
     segment_start = np.random.randint(low=0, high=background_duration_ms - segment_ms)
-    segment_end = segment_start + segment_ms - 1
+    segment_end = segment_start + segment_ms
 
     return segment_start, segment_end
 
 
-def cut_audio_segment(audio_segment, targeted_duration):
+def cut_audio_segment(audio_array, target_size):
     """
-    Cut the audio segment to the targeted duration randomly
-    :param audio_segment: audio segment to cut
-    :param targeted_duration: targeted_duration
+    Cut the audio segment to the targeted duration randomly if the audiosegment is shorter than the targeted duration we
+    pad it with random silence
+    :param audio_array: audio segment to cut in ms
+    :param target_size: targeted_duration in ms
     :return: the truncated audio segment
     """
-    duration = len(audio_segment)
-    if targeted_duration < duration:
-        segment_start = np.random.randint(low=0, high=duration-targeted_duration)
-        segment_end = segment_start + targeted_duration - 1
-        return audio_segment[segment_start:segment_end]
+    duration = len(audio_array)
+
+    if target_size < duration:
+        segment_start, segment_end = get_random_time_segment(target_size, duration)
+        result = audio_array[segment_start:segment_end]
+
     else:
-        return audio_segment
+        segment_start, segment_end = get_random_time_segment(duration, target_size)
+
+        result = np.pad(audio_array, (segment_start, duration - segment_end))
+
+    assert len(result) == target_size
+
+    return result
 
 
 def match_target_amplitude(sound, target_dBFS):
@@ -85,21 +108,3 @@ def match_target_amplitude(sound, target_dBFS):
     """
     change_in_dBFS = target_dBFS - sound.dBFS
     return sound.apply_gain(change_in_dBFS)
-
-
-def get_spectrogram(data, fs=2):
-    """
-    Get spectrogram from raw audio data
-    :param data: raw audio data
-    :param fs:
-    :return:
-    """
-
-    nchannels = data.ndim
-
-    if nchannels > 1:
-        data = data[:, 0]
-
-    pxx, _, _ = mlab.specgram(data, NFFT, fs, noverlap=int(NFFT / 2))
-
-    return pxx

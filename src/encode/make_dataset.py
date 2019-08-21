@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 import glob
 
-from src.utils.audio import match_target_amplitude, get_spectrogram, load_raw_audio
+from src.utils.audio import match_target_amplitude, get_spectrogram, load_processed_audio
 from src.utils.misc_utils import clean_data_dir
 from src.utils.tf_record import encode_serialize_example
 
@@ -87,7 +87,7 @@ def create_one_tf_record(data_dir, positives, background, targeted_duration, n_s
 
 def main(n_dev_samples, n_val_samples):
 
-    positives, backgrounds = load_raw_audio()
+    positives, backgrounds = load_processed_audio()
     background = backgrounds[0]
 
     files_to_delete = glob.glob("{}/*/*.tfrecord".format(ENCODE_PROCESSED_DATA_DIR))

@@ -8,8 +8,8 @@ import glob
 import tensorflow as tf
 
 from src.settings.trigger import *
-from src.utils.audio import load_raw_audio, get_random_time_segment, cut_audio_segment, get_spectrogram
-from src.utils.tf_record import trigger_serialize_example
+from src.utils.audio import load_processed_audio, get_random_time_segment, cut_audio_segment, get_spectrogram
+from src.utils.tf_record import serialize_example
 from src.utils.misc_utils import clean_data_dir
 
 
@@ -195,7 +195,7 @@ def create_one_tf_record(data_dir, sample_duration_ms, label_duration, positives
                                                 label_duration, positives, positive_labels,
                                                 type_set, export, hashcode))
 
-    [writer.write(trigger_serialize_example(x, y)) for x, y in examples]
+    [writer.write(serialize_example(x)) for x, y in examples]
 
     writer.close()
 
@@ -216,7 +216,7 @@ def main(n_dev_samples, n_val_samples):
 
     clean_data_dir(files_to_delete)
 
-    positives, backgrounds = load_raw_audio()
+    positives, backgrounds = load_processed_audio()
     positive_labels = sorted(positives.keys())
     background = backgrounds[0]
 

@@ -5,16 +5,17 @@ import tensorflow as tf
 def _dtype_feature(nparray):
     """match appropriate tf.train.Feature class with dtype of ndarray. """
     dtype_ = nparray.dtype
-    if dtype_ == np.float64 or dtype_ == np.float32:
+
+    if dtype_ in [np.float64,  np.float32]:
         return tf.train.Feature(float_list=tf.train.FloatList(value=nparray))
-    elif dtype_ == np.int64:
+
+    elif dtype_ in [np.int64, np.int32, np.int16]:
         return tf.train.Feature(int64_list=tf.train.Int64List(value=nparray))
 
 
-def trigger_serialize_example(x, y):
+def serialize_example(x):
     d_feature = {
-        'X': _dtype_feature(x),
-        'Y': _dtype_feature(y)
+        'audio': _dtype_feature(x)
     }
 
     features = tf.train.Features(feature=d_feature)
@@ -23,14 +24,20 @@ def trigger_serialize_example(x, y):
     return example.SerializeToString()
 
 
-def encode_serialize_example(x_1, x_2, y):
-    d_feature = {
-        'X_1': _dtype_feature(x_1),
-        'X_2': _dtype_feature(x_2),
-        'Y': _dtype_feature(y)
+def _parse_function(record):
+    """Extracts features and labels.
+
+    Args:
+      record: File path to a TFRecord file
+    Returns:
+      A `tuple` `(labels, features)`:
+        features: A dict of tensors representing the features
+        labels: A tensor with the corresponding labels.
+    """
+    features = {
+        "audio": tf.io.VarLenFeature(dtype=tf.int64)  # terms are strings of varying lengths
     }
 
-    features = tf.train.Features(feature=d_feature)
-    example = tf.train.Example(features=features)
+    parsed_features = tf.parse_single_example(record, features)
 
-    return example.SerializeToString()
+    return tf.sparse.to_dense(parsed_features['audio'])
