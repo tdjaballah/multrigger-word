@@ -73,8 +73,8 @@ def dataset_input_fn(positives, negatives, backgrounds, negative_ratio, num_epoc
 
     return (tf.data.Dataset.from_generator(background_generator(backgrounds, int(BACKGROUND_DURATION_MS*FRAME_RATE/1000)),
                                            output_types=tf.float32)
-            .map(add_word(positives, negatives, negative_ratio))
-            .map(spectrogram_from_samples)
+            .map(add_word(positives, negatives, negative_ratio), num_parallel_calls=N_CORES)
+            .map(spectrogram_from_samples, num_parallel_calls=N_CORES)
             .repeat(num_epochs)
             .prefetch(PREFETCH_SIZE)
             )
