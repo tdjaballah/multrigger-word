@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
     positives, negatives, backgrounds = load_processed_audio()
 
-    dataset = dataset_input_fn(positives, negatives, backgrounds, NEGATIVE_RATIO)
+    dataset = dataset_input_fn(positives, negatives, backgrounds, NEGATIVE_RATIO, BATCH_SIZE)
 
     model = nn(input_shape=(SPECTROGRAM_X, 128), n_classes=len(WORDS)+1)
 

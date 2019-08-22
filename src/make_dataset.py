@@ -6,10 +6,10 @@ from src.utils.audio import cut_audio_segment, get_random_time_segment
 from src.settings.general import *
 
 
-def background_generator(backgrounds, targeted_size):
+def background_generator(backgrounds, targeted_size, batch_size):
     def gen():
-        background = random.choice(backgrounds)
-        yield cut_audio_segment(background, targeted_size)
+        picked_backgrounds = random.choices(backgrounds, k=batch_size)
+        yield [cut_audio_segment(background, targeted_size) for background in picked_backgrounds]
     return gen
 
 
@@ -49,32 +49,41 @@ def add_word(positives, negatives, negative_ratio):
 
         return X, tf.sparse.to_dense(Y)
 
-    return fn
+    def fn_batch(backgrounds):
+        return tf.map_fn(fn, backgrounds, dtype=(tf.float32, tf.int32))
+
+    return fn_batch
 
 
-def spectrogram_from_samples(waveform, Y):
-    signals = tf.reshape(waveform, [1, -1])
-    stfts = tf.contrib.signal.stft(signals, frame_length=FFT_FRAME_LENGTH, frame_step=FFT_FRAME_STEP, fft_length=FFT_LENGTH)
-    magnitude_spectrograms = tf.abs(stfts)
+def spectrogram_from_samples_batch(waveforms, labels):
+    def spectrogram_from_samples(sample):
+        waveform, Y = sample
+        signals = tf.reshape(waveform, [1, -1])
+        stfts = tf.contrib.signal.stft(signals, frame_length=FFT_FRAME_LENGTH, frame_step=FFT_FRAME_STEP, fft_length=FFT_LENGTH)
+        magnitude_spectrograms = tf.abs(stfts)
 
-    num_spectrogram_bins = magnitude_spectrograms.shape[-1].value
+        num_spectrogram_bins = magnitude_spectrograms.shape[-1].value
 
-    linear_to_mel_weight_matrix = tf.contrib.signal.linear_to_mel_weight_matrix(NUM_MEL_BINS, num_spectrogram_bins,
-                                                                                FRAME_RATE, LOWER_EDGE_HERTZ,
-                                                                                UPPER_EDGE_HERTZ)
+        linear_to_mel_weight_matrix = tf.contrib.signal.linear_to_mel_weight_matrix(NUM_MEL_BINS, num_spectrogram_bins,
+                                                                                    FRAME_RATE, LOWER_EDGE_HERTZ,
+                                                                                    UPPER_EDGE_HERTZ)
 
-    mel_spectrograms = tf.tensordot(magnitude_spectrograms, linear_to_mel_weight_matrix, 1)
-    log_mel_spectrograms = tf.log(mel_spectrograms + tf.keras.backend.epsilon())
+        mel_spectrograms = tf.tensordot(magnitude_spectrograms, linear_to_mel_weight_matrix, 1)
+        log_mel_spectrograms = tf.log(mel_spectrograms + tf.keras.backend.epsilon())
 
-    return log_mel_spectrograms, Y
+        return tf.squeeze(log_mel_spectrograms), Y
+
+    return tf.map_fn(spectrogram_from_samples, (waveforms, labels))
 
 
-def dataset_input_fn(positives, negatives, backgrounds, negative_ratio, num_epochs=None):
+def dataset_input_fn(positives, negatives, backgrounds, negative_ratio, batch_size, num_epochs=None):
 
-    return (tf.data.Dataset.from_generator(background_generator(backgrounds, int(BACKGROUND_DURATION_MS*FRAME_RATE/1000)),
+    return (tf.data.Dataset.from_generator(background_generator(backgrounds,
+                                                                int(BACKGROUND_DURATION_MS*FRAME_RATE/1000),
+                                                                batch_size),
                                            output_types=tf.float32)
             .map(add_word(positives, negatives, negative_ratio), num_parallel_calls=N_CORES)
-            .map(spectrogram_from_samples, num_parallel_calls=N_CORES)
-            .repeat(num_epochs)
+            .map(spectrogram_from_samples_batch, num_parallel_calls=N_CORES)
             .prefetch(PREFETCH_SIZE)
+            .repeat(num_epochs)
             )
