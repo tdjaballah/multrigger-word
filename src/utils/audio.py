@@ -91,7 +91,6 @@ def cut_audio_segment(audio_array, target_size):
 
     else:
         segment_start, segment_end = get_random_time_segment(duration, target_size)
-
         result = np.pad(audio_array, (segment_start, duration - segment_end))
 
     assert len(result) == target_size

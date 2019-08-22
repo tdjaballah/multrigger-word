@@ -9,7 +9,7 @@ from matplotlib import mlab as mlab
 
 from src.settings.general import FRAME_RATE, FIGURE_DIR, NFFT
 from src.settings.trigger import TX,TY, FX, N_CLASSES, TRIGGER_KERNEL_SIZE, TRIGGER_STRIDE
-from src.models import trigger_model
+from src.models import nn
 from src.utils.audio import match_target_amplitude
 
 
@@ -126,10 +126,10 @@ if __name__ == "__main__":
 
     latest = tf.train.latest_checkpoint("../logs/trigger/checkpoints")
 
-    model = trigger_model(input_shape=(TX, FX),
-                          n_classes=N_CLASSES,
-                          kernel_size=TRIGGER_KERNEL_SIZE,
-                          stride=TRIGGER_STRIDE)
+    model = nn(input_shape=(TX, FX),
+               n_classes=N_CLASSES,
+               kernel_size=TRIGGER_KERNEL_SIZE,
+               stride=TRIGGER_STRIDE)
 
     model.load_weights(latest)
     ear = SWHear(model)
