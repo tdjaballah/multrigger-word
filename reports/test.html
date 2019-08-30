@@ -2,12 +2,14 @@
 <script language="javascript">
 function RefreshImage(){
 document.pic0.src="figures/waveform.png?a=" + String(Math.random()*99999999);
-document.pic1.src="figures/predictions.png?a=" + String(Math.random()*99999999);
+document.pic1.src="figures/spectrogram.png?a=" + String(Math.random()*99999999);
+document.pic2.src="figures/predictions.png?a=" + String(Math.random()*99999999);
 setTimeout('RefreshImage()',50);
 }
 </script>
 <body onload="RefreshImage()">
 <img name="pic0" src="figures/waveform.png">
-<img name="pic1" src="figures/predictions.png">
+<img name="pic1" src="figures/spectrogram.png">
+<img name="pic2" src="figures/predictions.png">
 </body>
 </html>

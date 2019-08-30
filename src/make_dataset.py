@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import tensorflow as tf
+import time
 
 from src.utils.audio import cut_audio_segment, get_random_time_segment
 from src.settings.general import *
@@ -50,12 +51,19 @@ def add_word(positives, negatives, negative_ratio):
         return X, tf.sparse.to_dense(Y)
 
     def fn_batch(backgrounds):
-        return tf.map_fn(fn, backgrounds, dtype=(tf.float32, tf.int32))
+        result = []
+
+        for background in backgrounds:
+            result.append(fn(background))
+
+        return tf.stack(result)
 
     return fn_batch
 
 
 def spectrogram_from_samples_batch(waveforms, labels):
+
+    @tf.contrib.eager.defun
     def spectrogram_from_samples(sample):
         waveform, Y = sample
         signals = tf.reshape(waveform, [1, -1])
@@ -73,7 +81,7 @@ def spectrogram_from_samples_batch(waveforms, labels):
 
         return tf.squeeze(log_mel_spectrograms), Y
 
-    return tf.map_fn(spectrogram_from_samples, (waveforms, labels))
+    return tf.map_fn(spectrogram_from_samples, (waveforms, labels), parallel_iterations=N_CORES)
 
 
 def dataset_input_fn(positives, negatives, backgrounds, negative_ratio, batch_size, num_epochs=None):
@@ -82,8 +90,8 @@ def dataset_input_fn(positives, negatives, backgrounds, negative_ratio, batch_si
                                                                 int(BACKGROUND_DURATION_MS*FRAME_RATE/1000),
                                                                 batch_size),
                                            output_types=tf.float32)
-            .map(add_word(positives, negatives, negative_ratio), num_parallel_calls=N_CORES)
-            .map(spectrogram_from_samples_batch, num_parallel_calls=N_CORES)
+            .map(lambda backgrounds: tf.py_function(add_word(positives, negatives, negative_ratio), backgrounds, (tf.float32, tf.int32)))
+            #.map(spectrogram_from_samples_batch, num_parallel_calls=N_CORES)
             .prefetch(PREFETCH_SIZE)
             .repeat(num_epochs)
             )

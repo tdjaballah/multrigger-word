@@ -23,6 +23,8 @@ if __name__ == '__main__':
 
     model.compile(loss=_soft_f1_macro, optimizer=opt, metrics=["accuracy", f1_scores_1, f1_scores_2, f1_scores_3])
 
+    print(model.summary())
+
     model.save('{}/model.h5'.format(LOG_DIR))
 
     csv_logger = tf.keras.callbacks.CSVLogger(str(TRAIN_LOG_FILE))

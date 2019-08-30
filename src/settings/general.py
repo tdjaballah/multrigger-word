@@ -22,7 +22,7 @@ CHECKPOINT_DIR = Path("{}/checkpoints".format(LOG_DIR))
 CHECKPOINT_FILES = "{}/cp-{}.ckpt".format(CHECKPOINT_DIR, "{epoch:04d}")
 FIGURE_DIR = Path("{}/reports/figures".format(PROJECT_DIR))
 
-WORDS = sorted({Path(k).parent.name for k in glob.glob("{}/positives/*/*.wav".format(RAW_DATA_DIR))})
+WORDS = sorted({Path(k).parent.name for k in glob.glob("{}/positives/*/*.wav".format(PROCESSED_DATA_DIR))})
 
 FRAME_RATE = 16000
 WORD_AMPLITUDE = -15
@@ -41,3 +41,6 @@ PREFETCH_SIZE = 10
 EPOCHS = 10
 STEPS_PER_EPOCH = 5
 VALIDATION_STEPS = 100
+
+LABEL_MAP_DICT = dict(enumerate(WORDS, 1))
+LABEL_MAP_DICT[0] = "background"

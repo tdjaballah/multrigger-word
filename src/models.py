@@ -12,18 +12,16 @@ def nn(input_shape, n_classes):
     :return: Keras model instance
     """
 
-    X_input = tf.keras.layers.Input(shape=input_shape)
+    model = tf.keras.models.Sequential()
 
     # Step 1: First GRU Layer (≈4 lines)
-    X = tf.keras.layers.GRU(units=256, return_sequences=True)(X_input)  # GRU (use 128 units and return the sequences)
-    X = tf.keras.layers.Dropout(0.2)(X)  # dropout (use 0.8)
-    X = tf.keras.layers.BatchNormalization()(X)  # Batch normalization
+    X_forward = tf.keras.layers.LSTM(units=128, activation='relu', return_sequences=True, input_shape=input_shape)  # GRU (use 128 units and return the sequences)
+    X_backward = tf.keras.layers.LSTM(128, activation='relu', return_sequences=True, go_backwards=True)
+    model.add(tf.keras.layers.Bidirectional(X_forward, backward_layer=X_backward))
+    model.add(tf.keras.layers.Dropout(0.2))  # dropout (use 0.8)
+    model.add(tf.keras.layers.BatchNormalization())  # Batch normalization
 
     # Step 4: Time-distributed dense layer (≈1 line)
-    X = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(n_classes, activation="softmax"))(X)  # time distributed (sigmoid)
-
-    model = tf.keras.models.Model(inputs=X_input, outputs=X)
-
-    print(model.summary())
+    model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(n_classes, activation="softmax")))  # time distributed (sigmoid)
 
     return model

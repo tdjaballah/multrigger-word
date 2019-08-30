@@ -3,15 +3,13 @@ import numpy as np
 import time
 import tensorflow as tf
 import pydub
+import seaborn as sns
 
 from matplotlib import pyplot as plt
-from matplotlib import mlab as mlab
 
-from src.settings.general import FRAME_RATE, FIGURE_DIR, NFFT
-from src.settings.trigger import TX,TY, FX, N_CLASSES, TRIGGER_KERNEL_SIZE, TRIGGER_STRIDE
-from src.models import nn
-from src.utils.audio import match_target_amplitude
-
+from src.utils.misc_utils import transform_labels
+from src.utils.tf_helper import _soft_f1_macro, f1_scores_1, f1_scores_2, f1_scores_3
+from src.settings.general import *
 
 SILENCE_THRESHOLD = 1000
 
@@ -31,11 +29,11 @@ class SWHear(object):
 
         self.model = model
         # for tape recording (continuous "tape" of recent audio)
-        self.tapeLength = 5         #seconds
-        self.tape = np.zeros(self.rate*self.tapeLength, dtype=np.int16)
+        self.tapeLength = int(BACKGROUND_DURATION_MS / 1000)        #seconds
+        self.tape = np.zeros(self.rate*self.tapeLength, dtype=np.float32)
 
         self.p = pyaudio.PyAudio()  # start the PyAudio class
-        self.stream = self.p.open(format=pyaudio.paInt16,
+        self.stream = self.p.open(format=pyaudio.paFloat32,
                                   channels=1,
                                   rate=self.rate, input=True,
                                   frames_per_buffer=self.chunk)
@@ -46,7 +44,7 @@ class SWHear(object):
 
     def stream_read(self):
         """return values for a single chunk"""
-        data = np.fromstring(self.stream.read(self.chunk, exception_on_overflow = False), dtype=np.int16)
+        data = np.fromstring(self.stream.read(self.chunk, exception_on_overflow = False), dtype=np.float32)
 
         return data
 
@@ -82,7 +80,8 @@ class SWHear(object):
                 if (time.time() - t1) > refresh_period:
                     t1 = time.time()
                     self.waveform_tape_plot()
-                    self.plot_predictions()
+                    spectrogram = self.make_spectrogram(export=True)
+                    self.make_prediction(spectrogram, LABEL_MAP_DICT)
                     print("plotting saving took %.02f ms" % ((time.time() - t1) * 1000))
 
         except Exception as e:
@@ -92,46 +91,67 @@ class SWHear(object):
     def waveform_tape_plot(self, filename="{}/waveform.png".format(FIGURE_DIR)):
         """plot what's in the tape."""
         plt.plot(np.arange(len(self.tape))/self.rate, self.tape)
-        plt.axis([0, self.tapeLength, -2**16/2, 2**16/2])
+        plt.axis([0, self.tapeLength, -1, 1])
 
         plt.savefig(filename, dpi=50)
 
         plt.close('all')
 
-    @staticmethod
-    def spectrogram_tape_plot(data):
-
-        specgram, _, _ = mlab.specgram(data, NFFT, 2, noverlap=int(NFFT / 2))
-
-        return specgram
-
-    def plot_predictions(self, filename="{}/predictions.png".format(FIGURE_DIR)):
+    def make_spectrogram(self, export=False, filename="{}/spectrogram.png".format(FIGURE_DIR)):
 
         x = self.tape
 
         audio = pydub.AudioSegment(x.tobytes(), frame_rate=FRAME_RATE, channels=1, sample_width=x.dtype.itemsize)
-        audio = match_target_amplitude(audio, -20.0)
+        waveform = np.array(audio.get_array_of_samples(), dtype=np.float32)
 
-        x = np.array(audio.get_array_of_samples())
-        x = np.swapaxes(self.spectrogram_tape_plot(x), 0, 1)
-        x = np.expand_dims(x, axis=0)
-        y = self.model.predict(x)[0]
-        plt.plot(y[:, 1])
-        plt.axis([0, TY, 0, 1])
-        plt.savefig(filename, dpi=50)
-        plt.close('all')
+        signals = tf.reshape(waveform, [1, -1])
+        stfts = tf.contrib.signal.stft(signals, frame_length=FFT_FRAME_LENGTH, frame_step=FFT_FRAME_STEP,
+                                       fft_length=FFT_LENGTH)
+        magnitude_spectrograms = tf.abs(stfts)
+
+        num_spectrogram_bins = magnitude_spectrograms.shape[-1].value
+
+        linear_to_mel_weight_matrix = tf.contrib.signal.linear_to_mel_weight_matrix(NUM_MEL_BINS, num_spectrogram_bins,
+                                                                                    FRAME_RATE, LOWER_EDGE_HERTZ,
+                                                                                    UPPER_EDGE_HERTZ)
+
+        mel_spectrograms = tf.tensordot(magnitude_spectrograms, linear_to_mel_weight_matrix, 1)
+        log_mel_spectrograms = tf.log(mel_spectrograms + tf.keras.backend.epsilon())
+
+        if export:
+            sns_plot = sns.heatmap(np.swapaxes(log_mel_spectrograms.numpy()[0], 0, 1))
+            sns_plot.get_figure().savefig(filename)
+            plt.close('all')
+
+        return log_mel_spectrograms
+
+    def make_prediction(self, spectrogram, map_dict, export=True, filename="{}/predictions.png".format(FIGURE_DIR)):
+
+        predictions = np.squeeze(model.predict(spectrogram))
+
+        if export:
+            predictions_df = transform_labels(predictions, map_dict)
+            sns_plot = sns.relplot(x='x', y='y', row='label', data=predictions_df, kind='line', height=2, aspect=2)
+            sns_plot.savefig(filename)
+            plt.close('all')
+
+        return predictions
 
 
 if __name__ == "__main__":
 
-    latest = tf.train.latest_checkpoint("../logs/trigger/checkpoints")
+    tf.enable_eager_execution()
 
-    model = nn(input_shape=(TX, FX),
-               n_classes=N_CLASSES,
-               kernel_size=TRIGGER_KERNEL_SIZE,
-               stride=TRIGGER_STRIDE)
+    latest = tf.train.latest_checkpoint("../logs/checkpoints")
+
+    model = tf.keras.models.load_model('{}/model.h5'.format(LOG_DIR), custom_objects={'_soft_f1_macro': _soft_f1_macro,
+                                                                                      'f1_scores_1': f1_scores_1,
+                                                                                      'f1_scores_2': f1_scores_2,
+                                                                                      'f1_scores_3': f1_scores_3})
 
     model.load_weights(latest)
+
+    print(model.summary())
     ear = SWHear(model)
     ear.tape_forever()
     ear.close()
